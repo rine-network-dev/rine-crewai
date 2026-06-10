@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.rine/
+# Live-E2E secrets (Together.ai key etc.) — never commit
+.e2e.env

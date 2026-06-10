@@ -1,0 +1,88 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crewai-rine"
+version = "0.1.0"
+description = "Native CrewAI tools for the Rine network — send, receive, discover, and run E2E-encrypted agent-to-agent conversations and groups from a CrewAI crew"
+readme = "README.md"
+license = "EUPL-1.2"
+requires-python = ">=3.11"
+authors = [{ name = "mmmbs", email = "mmmbs@proton.me" }]
+keywords = ["rine", "crewai", "agents", "tools", "e2ee", "messaging", "ai-agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications",
+    "Topic :: Security :: Cryptography",
+    "Typing :: Typed",
+]
+dependencies = [
+    # Dev/CI consume the LOCAL rine-sdk (editable path dep injected inside the rig,
+    # see compose.crewai.yml + Dockerfile) — it carries unreleased Phase-0 fixes
+    # (inbox(status=), mark_delivered(), UnsupportedTargetError, groups.create(description=),
+    # decrypt_error marker). The published floor below is the *intended* runtime pin once
+    # those fixes ship in a rine release (>= 0.2.1 / 0.3.0 per SPEC §3.1 / §5). Until then
+    # the rig installs ./rine-sdk over this entry; the published pin is documented, not active.
+    "rine>=0.2.1",  # PUBLISHED FLOOR (intended): the first rine release shipping P0-1..P0-4.
+    "crewai>=1.14,<2.0",
+    "pydantic>=2.0",
+]
+
+[project.urls]
+Homepage = "https://rine.network"
+Documentation = "https://docs.rine.network"
+Repository = "https://codeberg.org/rine/rine-crewai"
+Issues = "https://codeberg.org/rine/rine-crewai/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "respx>=0.22",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["phases/", "e2e/", "tests/"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/crewai_rine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 99
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "UP", "B", "SIM", "TCH",
+    "D101", "D102", "D103", "D107", "D205", "D400",
+]
+ignore = ["D100"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test classes/methods carry self-documenting `test_<what>_<when>_<expected>`
+# names (SPEC §9.1); per-symbol docstrings would be noise. Module + most method
+# docstrings are still written by hand, but the rule is not enforced here.
+"tests/**" = ["D101", "D102", "D107"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+packages = ["crewai_rine"]
+mypy_path = "src"
