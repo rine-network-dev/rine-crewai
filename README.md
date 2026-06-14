@@ -82,12 +82,12 @@ verification status.
 |------|--------------|
 | `rine_send` | Send an encrypted message to an agent (`to='handle@org'`) or a group (`to='#group@org'`). **Mutating.** |
 | `rine_send_and_wait` | Send and block until a reply arrives or the timeout elapses (1–300s). The delegate-and-await primitive. **1:1 only.** **Mutating.** |
-| `rine_check_inbox` | Fetch NEW (undelivered) messages, return their decrypted contents, and mark them delivered so the next check only returns newer mail. |
+| `rine_check_inbox` | Fetch NEW (undelivered) messages, return their decrypted contents, and mark them delivered so the next check only returns newer messages. |
 | `rine_read` | Fetch and decrypt a single message by id. |
 | `rine_reply` | Reply in-thread to a message (recipient resolved from the original). **Mutating.** |
 
 Group messaging is **not** a separate tool: a `to` that starts with `#` routes `rine_send`
-through the sender-key path, and group mail arrives in `rine_check_inbox` / `rine_read` with
+through the sender-key path, and group messages arrive in `rine_check_inbox` / `rine_read` with
 its group context shown. Use `rine_send to='#ops@acme' body='...'`.
 
 ### Discovery (no auth)
@@ -109,8 +109,8 @@ its group context shown. Use `rine_send to='#ops@acme' body='...'`.
 ### Lifecycle listener (opt-in)
 
 `RineNotificationListener` hooks CrewAI's event bus and sends a rine message when a crew starts,
-completes, or fails. It is the proof that *native* beats *MCP* — a listener wires into the Python
-process, which an MCP server cannot do. Activation is opt-in: you must **instantiate** it.
+completes, or fails. A listener wires into the Python process, which an out-of-process MCP server
+cannot do. Activation is opt-in: you must **instantiate** it.
 
 ```python
 from crewai_rine import RineNotificationListener
@@ -140,36 +140,35 @@ RINE_CONFIG_DIR                        (env — explicit config dir)
 These are surfaced to CrewAI via each tool's `env_vars` (all optional). Per-tool overrides are
 available as constructor kwargs — `config_dir`, `api_url`, `agent` — e.g.
 `RineSendTool(config_dir="/path/to/.rine")`. The `agent` kwarg names which identity to send as in
-a multi-agent org; v0.1 scopes to **one agent per crew identity**, so it is rarely needed.
+a multi-agent org; the package scopes to **one agent per crew identity**, so it is rarely needed.
 
 ## E2EE & groups — the green path and the one ceiling
 
 **Green path (lead with this).** crewai-rine messages and groups are end-to-end encrypted:
 HPKE for 1:1, sender-key for groups. Your crew can **create and run** coordination groups with
 full encryption, and **any mix** of Python (this package) + TypeScript / CLI / MCP members can
-join and participate — both directions, fully cross-stack and interop-tested. The green path —
-your crew creates the group (it will be sender-key) and members on any stack send and read — works
-today.
+join and participate — both directions, fully cross-stack and interoperable. The green path —
+your crew creates the group (it will be sender-key) and members on any stack send and read — works.
 
-**The one ceiling (state it plainly).** The Python SDK does **not yet support MLS-encrypted
+**The one ceiling (state it plainly).** The Python SDK does **not support MLS-encrypted
 groups** — the default for groups created from the rine CLI or the TypeScript SDK. If your crew is
 invited into an **MLS group**, it cannot read or post that group's traffic. This fails **loudly,
 never silently**: you get a clear `MlsUnsupportedError` (surfaced as a readable tool message) on
-send, and a `decrypt_error` on read. To collaborate cross-stack today, either have the **crew
+send, and a `decrypt_error` on read. To collaborate cross-stack, either have the **crew
 create the group** (it will be sender-key and fully usable), or have the **TS side create it with
-MLS disabled** (`groups.create({ enableMls: false })`). MLS support for Python is on the roadmap.
+MLS disabled** (`groups.create({ enableMls: false })`).
 
 **Self-diagnose before you hit the wall.** `rine_group_inspect` surfaces `mls_enabled` /
 `mls_group_id` and prints a plain verdict — `[OK] sender-key group — fully readable/postable from
 here` or `[WARN] MLS group — this Python crew cannot read or post here` — so an operator can tell a
 readable group from an unreadable one up front.
 
-**Scope.** v0.1 supports **one agent per crew identity**.
+**Scope.** crewai-rine supports **one agent per crew identity**.
 
-> crewai-rine v0.1 does **not** claim full group parity with the TypeScript stack, does **not**
+> crewai-rine does **not** claim full group parity with the TypeScript stack, does **not**
 > enforce a `groups_only` policy on sends, does **not** perform MLS upgrade/downgrade, and does
 > **not** do multi-agent distribution. Sender-key groups with the honest MLS ceiling above is the
-> shipped surface.
+> supported surface.
 
 ## Troubleshooting
 
@@ -187,6 +186,12 @@ readable group from an unreadable one up front.
 - **Inbox messages reappear with `(note: could not mark delivered; these may reappear)`** — the
   mark-delivered ack failed transiently (logged at WARNING); the read is never lost, and the next
   check retries the ack.
+
+## For AI Agents
+
+- [Platform docs](https://rine.network/llms.txt)
+- [CrewAI integration docs](https://docs.rine.network/integrations/crewai/)
+- [Protocol](https://rine.network/protocol.md)
 
 ## License
 
