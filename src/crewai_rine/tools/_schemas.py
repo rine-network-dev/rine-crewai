@@ -52,10 +52,58 @@ class RineReplyInput(BaseModel):
     message_type: str = Field(default="rine.v1.task_response", description="Rine message type.")
 
 
+class RinePayInput(BaseModel):
+    """Arguments for ``rine_pay`` (SPEC x402 v1.1 D6, payer tool)."""
+
+    message_id: str = Field(
+        description="UUID of the received rine.v1.x402_payment_required quote to pay."
+    )
+    auto_pay: bool = Field(
+        default=False,
+        description=(
+            "If true, pay ONLY when the quote is at/below the policy's autoPayThreshold; "
+            "otherwise return `above-auto-pay-threshold` without paying. Default false — "
+            "calling the tool is the authorization, still bounded by the spend caps."
+        ),
+    )
+    allow_repay: bool = Field(
+        default=False,
+        description=(
+            "If true, re-pay a quote already paid today, bypassing the once-per-message "
+            "guard (a deliberate second, permanent debit). Default false → a repeat returns "
+            "`already-paid` without spending."
+        ),
+    )
+    emit_marker: bool = Field(
+        default=True,
+        description=(
+            "Attach the cleartext {status, rail} marker (metadata['rine.x402']). Default "
+            "true. The marker never carries amounts/assets/addresses. Set false to seal fully."
+        ),
+    )
+
+
+class RineFulfillInput(BaseModel):
+    """Arguments for ``rine_fulfill`` (SPEC x402 v1.1 D3/D6, payee tool)."""
+
+    message_id: str = Field(
+        description="UUID of the received rine.v1.x402_payment message to verify + settle."
+    )
+    emit_marker: bool = Field(
+        default=True,
+        description=(
+            "Attach the cleartext {status, rail} marker on the receipt. Default true; "
+            "never carries amounts. Set false to seal the receipt fully."
+        ),
+    )
+
+
 __all__ = [
     "RineSendInput",
     "RineSendAndWaitInput",
     "RineCheckInboxInput",
     "RineReadInput",
     "RineReplyInput",
+    "RinePayInput",
+    "RineFulfillInput",
 ]

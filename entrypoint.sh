@@ -14,24 +14,24 @@ VENV="${VENV:-/opt/venv}"
 _RIG_INSTALLED="$VENV/.rig-installed"
 
 if [ ! -f "$_RIG_INSTALLED" ]; then
-  echo ">>> [rig] bootstrapping venv at $VENV (first run — installs crewai + deps; slow)"
+  echo ">>> [rig] bootstrapping venv at $VENV (first run — installs crewai + deps; slow)" >&2
   # Resolve uv to its absolute path BEFORE clearing the venv. `uv venv --clear` wipes
   # $VENV/bin (which is first on PATH); bash's command-hash would otherwise cache a now
   # -deleted $VENV/bin/uv and fail the next call ("No such file or directory") on a
   # re-bootstrap (marker removed but volume still populated).
   UV="$(command -v uv)"
   "$UV" venv --clear "$VENV"
-  # Force crewai-rine's `rine` dependency to resolve to the bind-mounted LOCAL SDK
-  # (unreleased Phase-0 fixes), overriding the published floor pinned in pyproject.toml.
-  # pyproject keeps the honest published pin (`rine>=0.2.1`); dev/tests run on the local
-  # source, which currently reports 0.2.0. The override is the rig-only escape hatch.
-  echo "rine @ file:///work/rine-sdk" > /tmp/rig-overrides.txt
+  # Install the bind-mounted LOCAL rine-sdk editable WITH the `payments` extra — the
+  # rine_pay / rine_fulfill tools sign EIP-3009 authorizations (wallet), which needs
+  # those deps at runtime. Installing rine editable first satisfies crewai-rine's
+  # `rine[payments]>=0.8.0` floor from local source (worktree rine-sdk is 0.8.0), so no
+  # PyPI resolution/override is needed. (A `--override rine @ file://…` here would STRIP
+  # the `[payments]` extra during resolution — the reason it is deliberately absent.)
   "$UV" pip install --python "$VENV/bin/python" \
-    --override /tmp/rig-overrides.txt \
-    -e /work/rine-sdk \
+    -e "/work/rine-sdk[payments]" \
     -e "/work/rine-crewai[dev]"
   touch "$_RIG_INSTALLED"
-  echo ">>> [rig] bootstrap complete"
+  echo ">>> [rig] bootstrap complete" >&2
 fi
 
 exec "$@"

@@ -21,18 +21,20 @@ from crewai_rine.listener import RineNotificationListener
 from crewai_rine.tools import (
     RineCheckInboxTool,
     RineDiscoverTool,
+    RineFulfillTool,
     RineGroupCreateTool,
     RineGroupInspectTool,
     RineGroupInviteTool,
     RineGroupRemoveTool,
     RineInspectTool,
+    RinePayTool,
     RineReadTool,
     RineReplyTool,
     RineSendAndWaitTool,
     RineSendTool,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     # messaging
@@ -49,6 +51,9 @@ __all__ = [
     "RineGroupInviteTool",
     "RineGroupRemoveTool",
     "RineGroupInspectTool",
+    # x402 payments (mutating — pay / fulfill)
+    "RinePayTool",
+    "RineFulfillTool",
     # lifecycle listener
     "RineNotificationListener",
     "__version__",

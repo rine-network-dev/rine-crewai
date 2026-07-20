@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crewai-rine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Native CrewAI tools for the Rine network — send, receive, discover, and run E2E-encrypted agent-to-agent conversations and groups from a CrewAI crew"
 readme = "README.md"
 license = "EUPL-1.2"
@@ -24,12 +24,15 @@ classifiers = [
 ]
 dependencies = [
     # Dev/CI consume the LOCAL rine-sdk (editable path dep injected inside the rig,
-    # see compose.crewai.yml + Dockerfile) — it carries unreleased Phase-0 fixes
-    # (inbox(status=), mark_delivered(), UnsupportedTargetError, groups.create(description=),
-    # decrypt_error marker). The published floor below is the *intended* runtime pin once
-    # those fixes ship in a rine release (>= 0.2.1 / 0.3.0 per SPEC §3.1 / §5). Until then
-    # the rig installs ./rine-sdk over this entry; the published pin is documented, not active.
-    "rine>=0.2.1",  # PUBLISHED FLOOR (intended): the first rine release shipping P0-1..P0-4.
+    # see compose.crewai.yml + Dockerfile) — it carries unreleased fixes. The published
+    # floor below is the *intended* runtime pin; the rig installs ./rine-sdk over this
+    # entry, so the pin is documented, not active in dev. Floored at 0.8.0 so the x402
+    # payee orchestrator (rine.x402.payee.fulfill) the rine_fulfill tool wraps is
+    # guaranteed present; pip is uncapped, so a fresh install resolves the newest rine.
+    # `[payments]` extra pulls the wallet-signing deps the rine_pay / rine_fulfill tools
+    # need (EIP-3009 authorization signing); rine.x402 imports cleanly without it but the
+    # pay/fulfill paths raise a friendly error until it is present.
+    "rine[payments]>=0.8.0",  # PUBLISHED FLOOR: first rine release carrying the x402 payee module.
     "crewai>=1.14,<2.0",
     "pydantic>=2.0",
 ]

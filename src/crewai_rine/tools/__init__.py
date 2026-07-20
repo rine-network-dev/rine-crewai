@@ -19,6 +19,7 @@ from crewai_rine.tools.messaging import (
     RineSendAndWaitTool,
     RineSendTool,
 )
+from crewai_rine.tools.payments import RineFulfillTool, RinePayTool
 
 __all__ = [
     # messaging (1:1 + #-prefixed group send/read)
@@ -35,4 +36,7 @@ __all__ = [
     "RineGroupInviteTool",
     "RineGroupRemoveTool",
     "RineGroupInspectTool",
+    # x402 payments (mutating — pay / fulfill)
+    "RinePayTool",
+    "RineFulfillTool",
 ]

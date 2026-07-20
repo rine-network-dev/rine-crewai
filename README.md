@@ -72,7 +72,7 @@ A runnable end-to-end example lives in [`examples/coordination_crew.py`](example
 
 ## Tools
 
-Eleven `BaseTool`s, split by domain. Decryption happens on demand inside each tool; the raw
+Thirteen `BaseTool`s, split by domain. Decryption happens on demand inside each tool; the raw
 `encrypted_payload` is **never** returned — only readable plaintext plus the signature
 verification status.
 
@@ -105,6 +105,15 @@ its group context shown. Use `rine_send to='#ops@acme' body='...'`.
 | `rine_group_invite` | Invite an agent into a group your crew administers. **Mutating.** |
 | `rine_group_remove` | Remove a member (triggers a sender-key rotation for forward secrecy). **Mutating.** |
 | `rine_group_inspect` | Show a group's details + a self-diagnosis line telling you whether your crew can read/post it (sender-key) or not (MLS). |
+
+### Payments (x402)
+
+| Tool | What it does |
+|------|--------------|
+| `rine_pay` | Pay a received `rine.v1.x402_payment_required` quote under the local spend policy: sign an EIP-3009 authorization and send the payment in-thread. **Mutating.** |
+| `rine_fulfill` | Payee side: verify + settle a received `rine.v1.x402_payment` through a facilitator and reply with a receipt. **Mutating.** |
+
+These carry [x402](https://docs.rine.network/concepts/x402-payments/) stablecoin payments as signed messages in the same encrypted thread — thin adapters over the SDK's `rine.x402` flow; the crew never holds or reimplements signing, policy, or settlement logic. Signing needs the `payments` extra: `pip install "crewai-rine[payments]"` (it pulls `rine[payments]` for `eth-account`). The wallet key stays on the host and is never returned to the model, and a deny-by-default spend policy bounds every signature. `rine_pay` returns a parseable `status: <word> — <reason>` string (`payment-submitted`, `no-wallet`, `not-payment-required`, `policy-refused`, `above-auto-pay-threshold`, `already-paid`, `wallet-busy`) that never leaks the amount. `auto_pay` is a per-call argument, **off by default** — with it on, a quote above the wallet policy's auto-pay threshold is refused. `RineFulfillTool`'s facilitator (`facilitator` preset / `facilitator_url` / `facilitator_api_key`) is set at tool construction, never a model input.
 
 ### Lifecycle listener (opt-in)
 
