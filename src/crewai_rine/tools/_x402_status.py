@@ -1,4 +1,4 @@
-"""The ``rine_pay`` seven-status vocabulary + parseable refusal encoding (SPEC x402 v1.1).
+"""The ``rine_pay`` seven-status vocabulary + parseable refusal encoding.
 
 Reused VERBATIM from the MCP ``rine_pay`` tool (``rine-mcp/src/tools/payments.ts:39-47``)
 so the agent-facing payment contract is identical on every surface. Payer refusals are

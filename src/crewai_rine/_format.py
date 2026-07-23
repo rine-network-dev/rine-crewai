@@ -4,8 +4,8 @@ Every tool returns a *string* the LLM reads — never a raw model and **never**
 ciphertext. These helpers turn ``DecryptedMessage`` / ``GroupRead`` / ``AgentProfile``
 / ``AgentSummary`` into plain text, surfacing ``plaintext``, ``verified`` /
 ``verification_status``, and ``decrypt_error`` honestly. The encrypted
-``encrypted_payload`` field is deliberately never read here (SPEC §2.4 / REQ-07,
-REQ-10): it must not enter the LLM context.
+``encrypted_payload`` field is deliberately never read here: it must not enter the
+LLM context.
 """
 
 from __future__ import annotations
@@ -28,12 +28,13 @@ def render_message_body(msg: DecryptedMessage) -> str:
     """Render the readable content of one message: plaintext or decrypt_error.
 
     Never returns ``encrypted_payload``. If the message could not be decrypted
-    (e.g. MLS or an unsupported version), the SDK's ``decrypt_error`` is surfaced
-    verbatim so the failure is loud, not silent. Otherwise the decrypted plaintext
+    (e.g. a malformed message or an unsupported version), the SDK's
+    ``decrypt_error`` is surfaced verbatim so the failure is loud, not silent.
+    Otherwise the decrypted plaintext
     is unwrapped: rine payloads are ``{"text": "..."}`` JSON (the convention every
     tool sends and the MCP surface ``JSON.parse``s), so the human ``text`` field is
     surfaced; a JSON object without ``text`` falls back to compact JSON and a
-    non-JSON plaintext to the raw string (SPEC §6.2).
+    non-JSON plaintext to the raw string.
     """
     if msg.decrypt_error:
         return f"[unreadable] {msg.decrypt_error}"
@@ -123,23 +124,26 @@ def render_profile(p: AgentProfile) -> str:
 
 
 def group_is_mls(g: GroupRead) -> bool:
-    """Return True if a group is MLS-encrypted (Python cannot read/post it).
+    """Return True if a group is post-quantum MLS-encrypted, False for sender-key.
 
     Any of the MLS latches (``mls_enabled``, a non-null ``mls_group_id``, or
-    ``mls_pending`` during the init window) means the sender-key path is frozen.
+    ``mls_pending`` during the init window) means the group runs on MLS. This crew
+    reads and posts both kinds — the flag only names which encryption is in use.
     """
     return bool(g.mls_enabled or g.mls_group_id is not None or g.mls_pending)
 
 
 def render_group(g: GroupRead) -> str:
-    """Render a group's details + the sender-key-vs-MLS self-diagnosis line."""
+    """Render a group's details + a plain encryption self-diagnosis line."""
     if group_is_mls(g):
         diagnosis = (
-            "[WARN] MLS group — this Python crew cannot read or post here "
-            "(use the rine CLI/MCP/TS SDK, or recreate as sender-key)."
+            "[OK] MLS group — end-to-end encrypted, post-quantum (X-Wing). "
+            "Readable and postable from here."
         )
     else:
-        diagnosis = "[OK] sender-key group — fully readable/postable from here."
+        diagnosis = (
+            "[OK] sender-key group — end-to-end encrypted, readable and postable from here."
+        )
     return (
         f"handle: {g.handle}\n"
         f"name: {g.name}\n"

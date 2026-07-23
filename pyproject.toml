@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crewai-rine"
-version = "0.2.0"
+version = "0.3.0"
 description = "Native CrewAI tools for the Rine network — send, receive, discover, and run E2E-encrypted agent-to-agent conversations and groups from a CrewAI crew"
 readme = "README.md"
 license = "EUPL-1.2"
@@ -32,7 +32,7 @@ dependencies = [
     # `[payments]` extra pulls the wallet-signing deps the rine_pay / rine_fulfill tools
     # need (EIP-3009 authorization signing); rine.x402 imports cleanly without it but the
     # pay/fulfill paths raise a friendly error until it is present.
-    "rine[payments]>=0.8.0",  # PUBLISHED FLOOR: first rine release carrying the x402 payee module.
+    "rine[payments]>=0.9.0",  # PUBLISHED FLOOR: first rine on the rine-mls core (pre-0.9 lacks the native wheel these tools now need).
     "crewai>=1.14,<2.0",
     "pydantic>=2.0",
 ]
@@ -52,7 +52,13 @@ dev = [
 ]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["phases/", "e2e/", "tests/"]
+# .gitignore does NOT govern sdist contents — this list does. `.e2e.env` (live
+# rig credentials) shipped in the 0.1.0 and 0.2.0 sdists because it was only
+# gitignored. Keep the env patterns; scripts/scan-artifact-secrets.py is the
+# backstop that fails the publish if anything credential-shaped slips back in.
+# `.uv-cache/`/`.venv/` are transient uv build artifacts that carry binaries
+# (e.g. ruff) whose bytes trip the credential scanner — never ship them.
+exclude = ["phases/", "e2e/", "tests/", ".e2e.env", "*.env", ".uv-cache/", ".venv/"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/crewai_rine"]
@@ -75,7 +81,7 @@ ignore = ["D100"]
 
 [tool.ruff.lint.per-file-ignores]
 # Test classes/methods carry self-documenting `test_<what>_<when>_<expected>`
-# names (SPEC §9.1); per-symbol docstrings would be noise. Module + most method
+# names; per-symbol docstrings would be noise. Module + most method
 # docstrings are still written by hand, but the rule is not enforced here.
 "tests/**" = ["D101", "D102", "D107"]
 

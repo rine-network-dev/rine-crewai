@@ -1,8 +1,8 @@
-"""1:1 + group messaging tools (SPEC §6.1–6.5, §6.9).
+"""1:1 + group messaging tools.
 
 Five ``BaseTool``s over ``SyncRineClient``: send, send-and-wait, check-inbox, read,
 reply. Group messaging is not a separate tool — a ``to`` starting with ``#`` routes
-through ``RineSendTool`` and group mail lands in the inbox/read path (SPEC §6.9).
+through ``RineSendTool`` and group mail lands in the inbox/read path.
 Every ``_run`` maps SDK errors to a string via ``_format_error`` — never a raw
 traceback, never ciphertext. Argument schemas live in ``_schemas.py``.
 """
@@ -116,9 +116,9 @@ class RineCheckInboxTool(BaseRineTool):
             deliverable = [str(m.id) for m in messages if m.decrypt_error is None]
             if deliverable:
                 # mark_delivered resolves the same agent inbox() used (public SDK
-                # surface §16). Best-effort: an ack failure must never lose the read —
+                # surface). Best-effort: an ack failure must never lose the read —
                 # but it IS surfaced (WARNING log + a note) so the LLM knows these
-                # messages may reappear on the next poll (SPEC §6.3).
+                # messages may reappear on the next poll.
                 try:
                     client.mark_delivered(deliverable, agent=self.agent)
                 except Exception:  # noqa: BLE001 — ack is best-effort, keep the messages

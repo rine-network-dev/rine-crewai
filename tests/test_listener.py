@@ -1,4 +1,4 @@
-"""Behavioral tests for RineNotificationListener (SPEC §6.13, REQ-17).
+"""Behavioral tests for RineNotificationListener.
 
 The listener is driven through its real public surface: instantiate it (which
 registers handlers on the crewai event bus), then ``emit`` real crew lifecycle
@@ -15,7 +15,7 @@ waiting on the emit future, so no in-flight handler crosses a test boundary. The
 content tests also decrypt the *actual wire body* (not a shared boolean), so an
 assertion can never be satisfied by a leaked sibling send.
 
-A notification failure must NEVER crash a crew (REQ-17): the failure-path tests
+A notification failure must NEVER crash a crew: the failure-path tests
 point the listener at a failing send and assert ``emit`` does not raise AND that a
 send was actually attempted (the failing route was called) — so the swallow is
 proven, not vacuously passed by a handler that never fired.
@@ -100,7 +100,7 @@ def _emit_and_wait(event) -> None:
     crewai runs sync event handlers on a ThreadPoolExecutor and returns a Future;
     a test must wait on it before asserting the handler's observable effect. The
     handler swallows its own exceptions, so the future resolving without raising
-    is itself the REQ-17 proof that a notification failure cannot crash a crew.
+    is itself the proof that a notification failure cannot crash a crew.
     A final ``flush()`` ensures no in-flight future leaks past this call.
     """
     future = crewai_event_bus.emit("crew", event)
@@ -184,7 +184,7 @@ class TestRineNotificationListener:
 
     @respx.mock
     def test_listener_swallows_send_failure_without_crashing_crew(self, config_dir):
-        """A send failure inside the handler must NOT propagate (REQ-17), but it must fire.
+        """A send failure inside the handler must NOT propagate, but it must fire.
 
         L4: the recipient-key fetch 500s → send() raises internally; the handler
         swallows it. Asserting the failing route WAS called proves a send was
@@ -227,7 +227,7 @@ class TestRineNotificationListener:
             _emit_and_wait(CrewKickoffCompletedEvent(crew_name="demo", output="done"))
             _emit_and_wait(CrewKickoffFailedEvent(crew_name="demo", error="boom"))
 
-        # no exception == REQ-17; the debug log proves the swallow path executed.
+        # no exception; the debug log proves the swallow path executed.
         assert any("rine notification send failed" in r.message for r in caplog.records), (
             "expected the listener's swallow-path debug log to fire"
         )

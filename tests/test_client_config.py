@@ -1,10 +1,10 @@
-"""Config/auth + packaging behavior (SPEC §7, REQ-01/02/05/06/18).
+"""Config/auth + packaging behavior.
 
 Config resolution is asserted through observable HTTP at the SDK boundary (which
 client_id reaches the token endpoint, which config dir the SDK reads) rather than
 by poking private attributes — a good test survives an internal rewrite that
 keeps the same auth behavior. The import-safety test runs in a subprocess with
-sockets disabled to prove a side-effect-free import (REQ-01).
+sockets disabled to prove a side-effect-free import.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from crewai_rine._client import RINE_ENV_VARS, _format_error
 
 from .conftest import API_URL, mock_agents
 
-# --- one shared error-mapping fixture set (REQ-18) ---
+# --- one shared error-mapping fixture set ---
 
 
 class TestErrorMapping:
@@ -47,11 +47,14 @@ class TestErrorMapping:
         out = _format_error(RateLimitError("slow down", retry_after=12))
         assert "retry after 12" in out
 
-    def test_mls_unsupported_error_maps_to_ceiling(self):
-        from rine.errors import MlsUnsupportedError
+    def test_missing_mls_group_state_tells_the_agent_how_to_get_it(self):
+        # Python does MLS now, so this is a recoverable state gap, not a ceiling:
+        # the SDK's own guidance has to reach the model-facing string intact.
+        from rine.errors import NoMlsGroupStateError
 
-        out = _format_error(MlsUnsupportedError())
-        assert "MLS" in out
+        out = _format_error(NoMlsGroupStateError("group-1"))
+        assert "group-1" in out
+        assert "Welcome" in out
 
     def test_generic_api_error_includes_status_and_detail(self):
         from rine.errors import RineApiError
@@ -65,14 +68,14 @@ class TestErrorMapping:
         assert out == "plain boom"
 
     def test_no_error_maps_to_a_raw_traceback(self):
-        """The mapper never returns a multi-line traceback (REQ-18)."""
+        """The mapper never returns a multi-line traceback."""
         from rine.errors import NotFoundError
 
         out = _format_error(NotFoundError("x"))
         assert "Traceback" not in out
 
 
-# --- env_vars declaration (REQ-05) ---
+# --- env_vars declaration ---
 
 
 class TestEnvVars:
@@ -95,7 +98,7 @@ class TestEnvVars:
         assert "RINE_TOKEN" not in names
 
 
-# --- config resolution precedence (REQ-06) ---
+# --- config resolution precedence ---
 
 
 class TestConfigResolution:
@@ -167,7 +170,7 @@ class TestConfigResolution:
         assert body["client_id"] == "good-cid"  # constructor dir won over env dir
 
 
-# --- import safety + public surface (REQ-01/02) ---
+# --- import safety + public surface ---
 
 _IMPORT_GUARD = """
 import socket
@@ -184,7 +187,7 @@ print("OK", crewai_rine.__version__)
 
 class TestImportSafety:
     def test_import_performs_no_network_call(self):
-        """REQ-01: importing crewai_rine builds no client and hits no socket."""
+        """Importing crewai_rine builds no client and hits no socket."""
         result = subprocess.run(
             [sys.executable, "-c", _IMPORT_GUARD],
             capture_output=True,
@@ -195,7 +198,7 @@ class TestImportSafety:
         assert result.stdout.startswith("OK")
 
     def test_init_exports_all_tools_and_listener(self):
-        """REQ-02: every tool class + the listener are public exports."""
+        """Every tool class + the listener are public exports."""
         expected = {
             "RineSendTool",
             "RineSendAndWaitTool",

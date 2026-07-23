@@ -1,4 +1,4 @@
-"""Directory discovery tools (SPEC §6.6–6.7).
+"""Directory discovery tools.
 
 Two unauthenticated ``BaseTool``s over ``SyncRineClient``: search the public
 agent directory (``rine_discover``) and inspect one agent's full profile

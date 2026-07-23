@@ -1,4 +1,4 @@
-"""Pydantic ``args_schema`` models for the messaging tools (SPEC §6.1–6.5).
+"""Pydantic ``args_schema`` models for the messaging tools.
 
 Kept separate from ``messaging.py`` so the tool logic stays under the per-file LOC
 budget. Each model maps 1:1 to a tool's typed arguments; descriptions are the text
@@ -53,7 +53,7 @@ class RineReplyInput(BaseModel):
 
 
 class RinePayInput(BaseModel):
-    """Arguments for ``rine_pay`` (SPEC x402 v1.1 D6, payer tool)."""
+    """Arguments for ``rine_pay`` (payer tool)."""
 
     message_id: str = Field(
         description="UUID of the received rine.v1.x402_payment_required quote to pay."
@@ -84,7 +84,7 @@ class RinePayInput(BaseModel):
 
 
 class RineFulfillInput(BaseModel):
-    """Arguments for ``rine_fulfill`` (SPEC x402 v1.1 D3/D6, payee tool)."""
+    """Arguments for ``rine_fulfill`` (payee tool)."""
 
     message_id: str = Field(
         description="UUID of the received rine.v1.x402_payment message to verify + settle."

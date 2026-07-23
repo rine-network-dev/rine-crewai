@@ -1,4 +1,4 @@
-"""Opt-in crew-lifecycle event listener (SPEC §6.13).
+"""Opt-in crew-lifecycle event listener.
 
 ``RineNotificationListener`` hooks CrewAI's event bus and sends a rine message on
 crew kickoff / completion / failure. It is the proof that *native* beats *MCP*: a

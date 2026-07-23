@@ -1,4 +1,4 @@
-"""x402 payment tools (SPEC x402 v1.1 D3/D6) — payer ``rine_pay`` + payee ``rine_fulfill``.
+"""x402 payment tools — payer ``rine_pay`` + payee ``rine_fulfill``.
 
 Both are **Mutating** ``BaseTool``s: ``rine_pay`` signs an EIP-3009 stablecoin
 authorization and moves the daily spend budget (permanent debit); ``rine_fulfill``

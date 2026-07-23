@@ -1,4 +1,4 @@
-"""Behavioral tests for the x402 payment tools (SPEC x402 v1.1 D3/D6, §9.1).
+"""Behavioral tests for the x402 payment tools.
 
 Both tools are exercised through their public CrewAI interface (``tool.run(...)``);
 assertions are on the returned ``status: <status> — <detail>`` string, the seven-status
@@ -18,7 +18,7 @@ import httpx
 import respx
 from rine._constants import EncryptionVersion, MessageType
 from rine.x402 import build_payment_required, create_wallet, save_policy
-from rine.x402.types import PaymentPolicy
+from rine.x402.types import X402_QUOTE_REF_KEY, PaymentPolicy
 
 from crewai_rine import RineFulfillTool, RinePayTool
 
@@ -39,6 +39,8 @@ EURC_ASSET = "0x808456652fdb597867f38412077a9182bf77359f"
 PAY_TO = "0x1111111111111111111111111111111111111111"
 PAYER_ADDR = "0x2222222222222222222222222222222222222222"
 FAC_URL = "https://facilitator.test"
+# The payee-issued quote a received payment references (distinct from the payment id).
+QUOTE_ID = "cccccccc-dddd-eeee-ffff-000000000003"
 
 
 def _self_keys_json(config_dir):
@@ -289,8 +291,14 @@ class TestRinePayTool:
 # =====================================================================
 
 
-def _payment_wire(config_dir):
-    """A real HPKE-sealed rine.v1.x402_payment carrying a parseable PaymentPayload."""
+def _payment_wire(config_dir, *, quote_ref=QUOTE_ID):
+    """A real HPKE-sealed rine.v1.x402_payment carrying a parseable PaymentPayload.
+
+    The signed body stamps the answered quote's id into
+    ``extensions[X402_QUOTE_REF_KEY]``: the payee settles against THAT quote's terms,
+    never this echoed ``accepted`` block. Pass ``quote_ref=None`` for a payment that
+    binds to no quote.
+    """
     payload = {
         "x402Version": 1,
         "scheme": "exact",
@@ -302,20 +310,47 @@ def _payment_wire(config_dir):
             "asset": EURC_ASSET,
             "payTo": PAY_TO,
         },
-        "payload": {"authorization": {"from": PAYER_ADDR}},
+        # The SIGNED value must cover the quoted tier (payee-side underpayment guard).
+        "payload": {"authorization": {"from": PAYER_ADDR, "to": PAY_TO, "value": "100000"}},
+        "extensions": {X402_QUOTE_REF_KEY: quote_ref} if quote_ref else {},
     }
     return hpke_self_encrypt(config_dir, payload)
 
 
-def _mock_payment(config_dir):
+def _mock_payment(config_dir, *, quote_ref=QUOTE_ID):
     respx.get(f"{API_URL}/messages/{MESSAGE_ID}").mock(
         return_value=httpx.Response(
             200,
             json=message_payload(
                 encryption_version=EncryptionVersion.HPKE_V1,
-                encrypted_payload=_payment_wire(config_dir),
+                encrypted_payload=_payment_wire(config_dir, quote_ref=quote_ref),
                 msg_type=MessageType.X402_PAYMENT,
             ),
+        )
+    )
+
+
+def _mock_referenced_quote(config_dir):
+    """Serve the payee's OWN issued quote at QUOTE_ID — what the payment's ref binds to.
+
+    A payee re-reads its own send, so ``GET /messages/{id}`` returns the row tagged
+    ``direction: "sent"`` with the self-sealed copy; the recipient-sealed
+    ``encrypted_payload`` is opaque to the payee, so the quote can only resolve
+    through the self-seal.
+    """
+    respx.get(f"{API_URL}/messages/{QUOTE_ID}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                **message_payload(
+                    encryption_version=EncryptionVersion.HPKE_V1,
+                    encrypted_payload="ZHVtbXk=",  # payer's copy — unreadable to the payee
+                    msg_id=QUOTE_ID,
+                    msg_type=MessageType.X402_PAYMENT_REQUIRED,
+                ),
+                "direction": "sent",
+                "self_encrypted_payload": _quote_wire(config_dir),
+            },
         )
     )
 
@@ -332,6 +367,7 @@ class TestRineFulfillTool:
         mock_token()
         mock_agents()
         _mock_payment(config_dir)
+        _mock_referenced_quote(config_dir)
         _mock_self_keys(config_dir)
         verify = respx.post(f"{FAC_URL}/verify").mock(
             return_value=httpx.Response(200, json={"isValid": True})
@@ -368,6 +404,7 @@ class TestRineFulfillTool:
         mock_token()
         mock_agents()
         _mock_payment(config_dir)
+        _mock_referenced_quote(config_dir)
         _mock_self_keys(config_dir)
         respx.post(f"{FAC_URL}/verify").mock(
             return_value=httpx.Response(200, json={"isValid": True})
@@ -399,6 +436,7 @@ class TestRineFulfillTool:
         mock_token()
         mock_agents()
         _mock_payment(config_dir)
+        _mock_referenced_quote(config_dir)
         _mock_self_keys(config_dir)
         respx.post(f"{FAC_URL}/verify").mock(
             return_value=httpx.Response(
@@ -416,6 +454,26 @@ class TestRineFulfillTool:
         assert reply.called  # payment-failed receipt still threaded back
         assert "failed verification" in out
         assert "insufficient_funds" in out
+        marker = json.loads(reply.calls[0].request.content)["metadata"]["rine.x402"]
+        assert marker["status"] == "payment-failed"
+
+    @respx.mock
+    def test_fulfill_payment_without_quote_ref_refuses_before_facilitator(self, config_dir):
+        """Fail closed: a payment bound to no payee-issued quote never reaches settle."""
+        mock_token()
+        mock_agents()
+        _mock_payment(config_dir, quote_ref=None)
+        _mock_self_keys(config_dir)
+        verify = respx.post(f"{FAC_URL}/verify")
+        settle = respx.post(f"{FAC_URL}/settle")
+        reply = respx.post(f"{API_URL}/messages/{MESSAGE_ID}/reply").mock(
+            return_value=httpx.Response(200, json={**sent_message_payload(), "id": REPLY_ID})
+        )
+
+        out = _fulfill_tool(config_dir).run(message_id=MESSAGE_ID)
+
+        assert not verify.called and not settle.called  # facilitator never contacted
+        assert "no-quote" in out
         marker = json.loads(reply.calls[0].request.content)["metadata"]["rine.x402"]
         assert marker["status"] == "payment-failed"
 

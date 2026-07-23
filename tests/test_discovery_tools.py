@@ -1,4 +1,4 @@
-"""Behavioral tests for the discovery tools (SPEC §6.6-6.7, §9.1).
+"""Behavioral tests for the discovery tools.
 
 ``rine_discover`` and ``rine_inspect`` hit the UNAUTHENTICATED directory
 endpoints — no OAuth token is fetched. Asserted by NOT mocking ``/oauth/token``

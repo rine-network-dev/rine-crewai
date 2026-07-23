@@ -20,6 +20,7 @@ import pytest
 from rine import SyncRineClient
 from rine._config import save_credentials
 from rine._constants import MessageType
+from rine._crypto.dm_envelope import RecipientKeys
 from rine._crypto.keys import (
     encryption_public_key_to_jwk,
     generate_agent_keys,
@@ -145,6 +146,95 @@ def mock_sender_keys_unverifiable(agent_id: str = AGENT_ID) -> None:
     )
 
 
+def mock_mls_init_chain(group_id: str = GROUP_ID) -> Any:
+    """Stub the create-time MLS init handshake (key-packages, init, commit).
+
+    A closed group's create founds real MLS state; this satisfies the three POST
+    endpoints that founding walks (KeyPackage replenish, ``mls/init``,
+    ``mls/commit``) so the create completes as a genuine post-quantum MLS group
+    rather than a group with no MLS state. Returns the ``mls/init`` route for
+    ``.called`` assertions.
+    """
+    import respx
+
+    respx.post(f"{API_URL}/agents/{AGENT_ID}/mls/key-packages").mock(
+        return_value=httpx.Response(201, json={"stored": 10})
+    )
+    init = respx.post(f"{API_URL}/groups/{group_id}/mls/init").mock(
+        return_value=httpx.Response(
+            200, json={"members": [{"agent_id": AGENT_ID, "has_key_package": True}]}
+        )
+    )
+    respx.post(f"{API_URL}/groups/{group_id}/mls/commit").mock(
+        return_value=httpx.Response(200, json={"epoch": 1})
+    )
+    return init
+
+
+def install_mls_membership(config_dir: str) -> None:
+    """Give AGENT_ID genuine local MLS state for the group at GROUP_ID.
+
+    A second real MLS core (OTHER_AGENT_ID, the group's admin) founds the group
+    admitting AGENT_ID's freshly minted KeyPackage, and the resulting Welcome is
+    delivered and installed — the exact path a real invited member takes. After
+    this AGENT_ID can encrypt/decrypt ``mls-v1`` traffic for the group with the
+    real Rust core, so a group send through the connector genuinely succeeds.
+
+    The caller must have registered :func:`mock_token` first (KeyPackage publish
+    and Welcome fetch both authenticate). Registers the KeyPackage-publish and
+    Welcome-fetch routes on the active respx router.
+    """
+    import base64
+    import json
+
+    import respx
+    from rine._mls import (
+        mls_group_id_bytes,
+        open_mls_client,
+        process_mls_welcomes,
+        publish_mls_key_packages,
+    )
+
+    kp_route = respx.post(f"{API_URL}/agents/{AGENT_ID}/mls/key-packages").mock(
+        return_value=httpx.Response(201, json={"stored": 10})
+    )
+    client = SyncRineClient(config_dir=config_dir, api_url=API_URL)
+    try:
+        publish_mls_key_packages(client._http, config_dir, AGENT_ID)
+        key_package = base64.b64decode(
+            json.loads(kp_route.calls[0].request.content)["packages"][0], validate=True
+        )
+
+        peer_dir = f"{config_dir}/peer-{OTHER_AGENT_ID}"
+        save_agent_keys(peer_dir, OTHER_AGENT_ID, generate_agent_keys())
+        peer = open_mls_client(peer_dir, OTHER_AGENT_ID)
+        group = peer.create_group_with_members(mls_group_id_bytes(GROUP_ID), [key_package])
+        group.save()
+        welcome = group.last_commit().welcomes[0]
+
+        respx.get(f"{API_URL}/agents/{AGENT_ID}/mls/welcomes").mock(
+            side_effect=[
+                httpx.Response(
+                    200,
+                    json={
+                        "welcomes": [
+                            {
+                                "id": "77777777-8888-9999-aaaa-bbbbbbbbbbbb",
+                                "group_id": GROUP_ID,
+                                "blob": base64.b64encode(welcome).decode("ascii"),
+                                "created_at": "2024-01-01T00:00:00Z",
+                            }
+                        ]
+                    },
+                ),
+                *[httpx.Response(200, json={"welcomes": []}) for _ in range(9)],
+            ]
+        )
+        process_mls_welcomes(client._http, config_dir, AGENT_ID)
+    finally:
+        client.close()
+
+
 def hpke_self_encrypt(config_dir: str, payload: dict[str, Any]) -> str:
     """HPKE-encrypt ``payload`` from AGENT_ID to AGENT_ID (self-readable).
 
@@ -152,8 +242,11 @@ def hpke_self_encrypt(config_dir: str, payload: dict[str, Any]) -> str:
     can actually decrypt, so plaintext + ciphertext-invariant assertions run the
     real crypto path.
     """
-    own_pk = load_agent_keys(config_dir, AGENT_ID).encryption.public_key
-    return encrypt_message(config_dir, AGENT_ID, own_pk, payload).encrypted_payload
+    # Classical on purpose: the recipient's ML-KEM half is left out so this helper
+    # keeps producing `hpke-v1`, which is what the fixtures around it declare.
+    own = load_agent_keys(config_dir, AGENT_ID)
+    recipient = RecipientKeys(encryption=own.encryption.public_key)
+    return encrypt_message(config_dir, AGENT_ID, recipient, payload).encrypted_payload
 
 
 def decrypt_self_wire(config_dir: str, encrypted_payload_b64: str) -> str:
@@ -244,6 +337,7 @@ def group_payload(
     mls_enabled: bool = False,
     mls_group_id: str | None = None,
     mls_pending: bool = False,
+    mls_cipher_suite: int | None = None,
     description: str | None = None,
 ) -> dict[str, Any]:
     """A ``GroupRead`` payload (server ``/groups`` item shape)."""
@@ -259,4 +353,50 @@ def group_payload(
         "mls_enabled": mls_enabled,
         "mls_group_id": mls_group_id,
         "mls_pending": mls_pending,
+        "mls_cipher_suite": mls_cipher_suite,
+    }
+
+
+def member_payload(
+    *,
+    group_id: str = GROUP_ID,
+    agent_id: str = AGENT_ID,
+) -> dict[str, Any]:
+    """A ``GroupMember`` payload (server 200 join response shape)."""
+    return {
+        "id": "eeeeeeee-ffff-0000-1111-222222222222",
+        "group_id": group_id,
+        "agent_id": agent_id,
+        "role": "member",
+        "joined_at": "2024-01-01T00:00:00Z",
+    }
+
+
+def join_request_payload(
+    *,
+    request_id: str = "ffffffff-0000-1111-2222-333333333333",
+    group_id: str = GROUP_ID,
+    agent_id: str = AGENT_ID,
+    status: str = "pending",
+    group_handle: str | None = GROUP_HANDLE,
+    group_name: str | None = "ops",
+) -> dict[str, Any]:
+    """A ``JoinRequestRead`` payload.
+
+    The shape the server returns from ``/groups/{id}/join`` (202) and as a
+    ``/groups/invites`` list item.
+    """
+    return {
+        "id": request_id,
+        "group_id": group_id,
+        "agent_id": agent_id,
+        "invited_by": None,
+        "message": None,
+        "status": status,
+        "expires_at": None,
+        "created_at": "2024-01-01T00:00:00Z",
+        "resolved_at": None,
+        "your_vote": None,
+        "group_handle": group_handle,
+        "group_name": group_name,
     }

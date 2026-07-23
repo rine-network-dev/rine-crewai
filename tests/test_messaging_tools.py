@@ -1,10 +1,10 @@
-"""Behavioral tests for the messaging tools (SPEC §6.1-6.5, §9.1).
+"""Behavioral tests for the messaging tools.
 
 Each tool is exercised through its public CrewAI interface (``tool.run(...)``);
 assertions are on the human-readable return string and observable HTTP. Only the
 rine HTTP boundary is mocked (respx) — the SDK crypto/config/HTTP is real.
 
-The ciphertext-never-leaks invariant (REQ-07/REQ-09/REQ-10) is asserted by
+The ciphertext-never-leaks invariant is asserted by
 encrypting a marker plaintext with a real HPKE round-trip and checking the raw
 ciphertext string never appears in any tool return.
 """
@@ -31,12 +31,14 @@ from .conftest import (
     API_URL,
     CONVERSATION_ID,
     GROUP_HANDLE,
+    GROUP_ID,
     MESSAGE_ID,
     OTHER_AGENT_ID,
     OTHER_HANDLE,
     REPLY_ID,
     group_payload,
     hpke_self_encrypt,
+    install_mls_membership,
     message_payload,
     mock_agents,
     mock_recipient_keys,
@@ -134,7 +136,7 @@ class TestRineSendTool:
 
     @respx.mock
     def test_send_to_missing_agent_returns_not_found_string(self, config_dir):
-        """A 404 from the recipient-key fetch maps to the §6.14 not-found string."""
+        """A 404 from the recipient-key fetch maps to the not-found string."""
         mock_token()
         mock_agents()
         mock_webfinger()
@@ -148,21 +150,52 @@ class TestRineSendTool:
         assert "agent not found" in out
 
     @respx.mock
-    def test_send_to_mls_group_returns_honest_ceiling_string(self, config_dir):
-        """A send to a TS-created MLS group surfaces the MLS ceiling, never silently fails."""
+    def test_send_to_mls_group_succeeds(self, config_dir):
+        """A '#' send to a post-quantum MLS group genuinely encrypts and posts mls-v1.
+
+        The agent holds real local MLS state (installed from a peer-founded Welcome),
+        so the connector's send walks the real MLS path: it pre-syncs handshakes,
+        encrypts with the Rust core, and POSTs an ``mls-v1`` message — no ceiling.
+        """
         mock_token()
         mock_agents()
+        install_mls_membership(config_dir)
         respx.get(f"{API_URL}/groups").mock(
             return_value=httpx.Response(
                 200,
-                json={"items": [group_payload(mls_group_id="mls-abc", mls_pending=False)]},
+                json={
+                    "items": [
+                        group_payload(
+                            mls_enabled=True, mls_group_id="mls-active", mls_pending=False
+                        )
+                    ]
+                },
+            )
+        )
+        # The pre-send epoch sync: no commits past our epoch.
+        respx.get(f"{API_URL}/groups/{GROUP_ID}/mls/handshakes").mock(
+            return_value=httpx.Response(200, json={"handshakes": []})
+        )
+        send_route = respx.post(f"{API_URL}/messages").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    **message_payload(
+                        encryption_version=EncryptionVersion.MLS_V1,
+                        encrypted_payload="x",
+                        group_id=GROUP_ID,
+                    ),
+                    "to_agent_id": None,
+                },
             )
         )
 
         out = _send_tool(config_dir).run(to=GROUP_HANDLE, body="team update")
 
-        assert "MLS" in out
-        assert "sender-key" in out
+        body = json.loads(send_route.calls[0].request.content)
+        assert body["encryption_version"] == EncryptionVersion.MLS_V1
+        assert body["to_handle"] == GROUP_HANDLE
+        assert f"Sent message {MESSAGE_ID}" in out
 
     @respx.mock
     def test_send_never_raises_on_error(self, config_dir):
@@ -353,7 +386,7 @@ class TestRineCheckInboxTool:
 
         assert "inbox hello" in out
         assert "1 new message" in out
-        # status=new must be forwarded (P0-1)
+        # status=new must be forwarded
         assert b"status=new" in inbox_route.calls[0].request.url.query
         # ciphertext invariant
         assert ciphertext not in out
@@ -395,7 +428,7 @@ class TestRineCheckInboxTool:
         """L5: a transient ack (mark_delivered) failure must NOT lose the read.
 
         The message is still returned, a WARNING is logged, and a note is appended so
-        the LLM knows the mail may reappear (SPEC §6.3 best-effort promise).
+        the LLM knows the mail may reappear (best-effort promise).
         """
         mock_token()
         mock_agents()
@@ -427,7 +460,7 @@ class TestRineCheckInboxTool:
 
         # The read is NOT lost despite the failed ack.
         assert "still here" in out
-        # The LLM is told these may reappear (the §6.3 honesty note).
+        # The LLM is told these may reappear (the honesty note).
         assert "could not mark delivered" in out
         # And the failure is observable at WARNING, not silently swallowed.
         assert any("mark_delivered failed" in r.message for r in caplog.records), (
@@ -544,7 +577,12 @@ class TestRineReadTool:
         assert ciphertext not in out
 
     @respx.mock
-    def test_read_mls_message_surfaces_decrypt_error_not_ciphertext(self, config_dir):
+    def test_read_mls_message_naming_no_group_surfaces_structured_error(self, config_dir):
+        """A groupless mls-v1 message is malformed — the structured error is surfaced.
+
+        The SDK raises rather than soft-failing, so the connector surfaces the loud
+        MLS error string, never the ciphertext.
+        """
         mock_token()
         mock_agents()
         respx.get(f"{API_URL}/messages/{MESSAGE_ID}").mock(
@@ -560,7 +598,8 @@ class TestRineReadTool:
         out = RineReadTool(config_dir=config_dir, api_url=API_URL).run(message_id=MESSAGE_ID)
 
         assert "MLS" in out
-        assert "[unreadable]" in out
+        assert "names no group" in out
+        assert "malformed message" in out
         assert "Q0lQSEVSVEVYVA==" not in out
 
     @respx.mock

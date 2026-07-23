@@ -1,7 +1,7 @@
 """Shared config/auth resolver and tool base for crewai-rine.
 
 One place every tool gets its ``SyncRineClient`` from. The resolution chain is the
-SDK's, untouched (SPEC §7): ``RINE_CLIENT_ID``+``RINE_CLIENT_SECRET`` env →
+SDK's, untouched: ``RINE_CLIENT_ID``+``RINE_CLIENT_SECRET`` env →
 ``RINE_CONFIG_DIR`` env → ``~/.config/rine`` → ``cwd/.rine``. We do **not** reimplement
 that chain — the SDK's ``SyncRineClient`` resolves it when ``config_dir``/``api_url``/
 ``agent`` are left at their defaults. This module only:
@@ -25,7 +25,6 @@ from pydantic import PrivateAttr
 from rine import (
     AuthenticationError,
     ConfigError,
-    MlsUnsupportedError,
     NotFoundError,
     RateLimitError,
     RineApiError,
@@ -80,16 +79,15 @@ def build_client(
 
 
 def _format_error(err: Exception) -> str:
-    """Map a Rine error to a clear, LLM-facing string (SPEC §6.14).
+    """Map a Rine error to a clear, LLM-facing string.
 
     Tool ``_run`` bodies return these strings; CrewAI surfaces them to the agent so it
     retries/continues rather than crashing. Never leak a raw traceback to a tool return.
+    Anything without a branch falls through to ``str(err)``, which is where a crypto
+    failure such as ``NoMlsGroupStateError`` lands: the SDK's own message already tells
+    the agent what to do about it, so restating it here would only give the two places
+    to drift apart.
     """
-    if isinstance(err, MlsUnsupportedError):
-        return (
-            "This group uses MLS encryption, which the Python side can't post to. "
-            "Create a sender-key group or have the TypeScript side disable MLS."
-        )
     if isinstance(err, AuthenticationError):
         return (
             "Rine auth failed — set RINE_CLIENT_ID/RINE_CLIENT_SECRET or onboard "

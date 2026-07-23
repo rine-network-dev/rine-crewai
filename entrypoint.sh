@@ -27,7 +27,16 @@ if [ ! -f "$_RIG_INSTALLED" ]; then
   # `rine[payments]>=0.8.0` floor from local source (worktree rine-sdk is 0.8.0), so no
   # PyPI resolution/override is needed. (A `--override rine @ file://…` here would STRIP
   # the `[payments]` extra during resolution — the reason it is deliberately absent.)
+  # rine-mls (rine's compiled MLS + ML-KEM core) comes from the prebuilt wheelhouse
+  # mounted at /work/wheels, never from source: the SDK's `[tool.uv.sources]` points it
+  # at a crate, and building that crate needs a Rust toolchain no rig image carries.
+  # `--no-index` is what proves the wheel came from there and not from PyPI, where
+  # rine-mls is not published yet.
   "$UV" pip install --python "$VENV/bin/python" \
+    --no-index --find-links /work/wheels rine-mls
+  # ...so the SDK install ignores that one source and takes the wheel above as
+  # satisfying its `rine-mls` dependency. Every other source mapping still applies.
+  "$UV" pip install --python "$VENV/bin/python" --no-sources-package rine-mls \
     -e "/work/rine-sdk[payments]" \
     -e "/work/rine-crewai[dev]"
   touch "$_RIG_INSTALLED"

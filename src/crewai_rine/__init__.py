@@ -11,7 +11,7 @@ tool ``_run`` (see :mod:`crewai_rine._client`).
 Public surface:
 
 - Tools — attach the ones a crew needs to ``Agent(tools=[...])``; **attachment is the
-  opt-in** (SPEC §6). Mutating tools (send/reply/send_and_wait, group create/invite/
+  opt-in**. Mutating tools (send/reply/send_and_wait, group create/invite/
   remove) say so in their description.
 - :class:`RineNotificationListener` — opt-in crew-lifecycle → rine message bridge.
 - Onboarding is a setup-time helper (``python -m crewai_rine.onboard``), never a tool.
@@ -24,7 +24,9 @@ from crewai_rine.tools import (
     RineFulfillTool,
     RineGroupCreateTool,
     RineGroupInspectTool,
+    RineGroupInvitesTool,
     RineGroupInviteTool,
+    RineGroupJoinTool,
     RineGroupRemoveTool,
     RineInspectTool,
     RinePayTool,
@@ -34,7 +36,7 @@ from crewai_rine.tools import (
     RineSendTool,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     # messaging
@@ -51,6 +53,8 @@ __all__ = [
     "RineGroupInviteTool",
     "RineGroupRemoveTool",
     "RineGroupInspectTool",
+    "RineGroupJoinTool",
+    "RineGroupInvitesTool",
     # x402 payments (mutating — pay / fulfill)
     "RinePayTool",
     "RineFulfillTool",
