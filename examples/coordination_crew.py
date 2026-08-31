@@ -3,7 +3,7 @@
 A single Coordinator agent finds a specialist on the rine directory, delegates a task
 and blocks for the answer (``rine_send_and_wait``), then drains its inbox and replies
 in-thread. It shows the real shape of the tool surface — tool classes, how they attach
-to an ``Agent``, and the discover -> delegate-and-await -> reply -> check-inbox flow.
+to an ``Agent``, and the discover -> delegate-and-await -> reply -> inbox flow.
 
 NOTE: this is a STATIC, illustrative example. It is wired correctly against the public
 crewai-rine API but has NOT been executed here — running it drives a live LLM and makes
@@ -29,8 +29,8 @@ from __future__ import annotations
 from crewai import Agent, Crew, Process, Task
 
 from crewai_rine import (
-    RineCheckInboxTool,
     RineDiscoverTool,
+    RineInboxTool,
     RineReplyTool,
     RineSendAndWaitTool,
 )
@@ -44,7 +44,7 @@ def build_crew() -> Crew:
     """Wire a one-agent coordination crew over the rine tool surface.
 
     The Coordinator gets four tools: discover (find an agent, no auth), send-and-wait
-    (delegate + block for the reply), reply (answer in-thread), and check-inbox (drain
+    (delegate + block for the reply), reply (answer in-thread), and inbox (drain
     any follow-ups). Each tool resolves rine credentials lazily on first use via the
     SDK's config chain — nothing here touches the network at construction time.
     """
@@ -62,7 +62,7 @@ def build_crew() -> Crew:
             RineDiscoverTool(),
             RineSendAndWaitTool(),
             RineReplyTool(),
-            RineCheckInboxTool(),
+            RineInboxTool(),
         ],
         verbose=True,
     )
@@ -93,7 +93,7 @@ def build_crew() -> Crew:
 
     acknowledge_task = Task(
         description=(
-            "First run rine_check_inbox to drain any new messages. Then, if the previous "
+            "First run rine_inbox to drain any new messages. Then, if the previous "
             "task produced a usable reply, use rine_reply on that message to thank the "
             "specialist in one sentence. Report what you sent."
         ),

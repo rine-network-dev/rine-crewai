@@ -12,14 +12,19 @@ Public surface:
 
 - Tools — attach the ones a crew needs to ``Agent(tools=[...])``; **attachment is the
   opt-in**. Mutating tools (send/reply/send_and_wait, group create/invite/
-  remove) say so in their description.
+  remove/vote/leave) say so in their description.
 - :class:`RineNotificationListener` — opt-in crew-lifecycle → rine message bridge.
 - Onboarding is a setup-time helper (``python -m crewai_rine.onboard``), never a tool.
+
+``__version__`` is the single source of truth, read from the installed package metadata
+(the version literal lives only in ``pyproject.toml``).
 """
+
+from importlib.metadata import PackageNotFoundError, version
 
 from crewai_rine.listener import RineNotificationListener
 from crewai_rine.tools import (
-    RineCheckInboxTool,
+    RineDiscoverGroupsTool,
     RineDiscoverTool,
     RineFulfillTool,
     RineGroupCreateTool,
@@ -27,34 +32,62 @@ from crewai_rine.tools import (
     RineGroupInvitesTool,
     RineGroupInviteTool,
     RineGroupJoinTool,
+    RineGroupLeaveTool,
+    RineGroupReclaimTool,
     RineGroupRemoveTool,
+    RineGroupRequestsTool,
+    RineGroupRosterTool,
+    RineGroupsTool,
+    RineGroupSyncTool,
+    RineGroupVoteTool,
+    RineInboxTool,
     RineInspectTool,
     RinePayTool,
     RineReadTool,
     RineReplyTool,
     RineSendAndWaitTool,
     RineSendTool,
+    RineThreadTool,
+    RineWhoamiTool,
 )
 
-__version__ = "0.3.0"
+try:
+    __version__ = version("crewai-rine")
+except PackageNotFoundError:  # editable/uninstalled runs (e.g. running from source tree)
+    # 🔴 A SENTINEL, never the real number. A hardcoded literal here read "0.4.0"
+    # while pyproject said 0.5.0, and nothing in this package gates the two against
+    # each other — crewai gets pytest alone, with no version-consistency test of the
+    # kind rine-sdk carries. A value that cannot go stale is the fix; the number now
+    # lives in exactly one place.
+    __version__ = "0.0.0"
 
 __all__ = [
     # messaging
     "RineSendTool",
     "RineSendAndWaitTool",
-    "RineCheckInboxTool",
+    "RineInboxTool",
     "RineReadTool",
     "RineReplyTool",
+    "RineThreadTool",
     # discovery
     "RineDiscoverTool",
     "RineInspectTool",
+    "RineDiscoverGroupsTool",
+    "RineWhoamiTool",
     # groups
+    "RineGroupsTool",
     "RineGroupCreateTool",
     "RineGroupInviteTool",
     "RineGroupRemoveTool",
     "RineGroupInspectTool",
+    "RineGroupRosterTool",
     "RineGroupJoinTool",
     "RineGroupInvitesTool",
+    "RineGroupRequestsTool",
+    "RineGroupVoteTool",
+    "RineGroupLeaveTool",
+    "RineGroupSyncTool",
+    "RineGroupReclaimTool",
     # x402 payments (mutating — pay / fulfill)
     "RinePayTool",
     "RineFulfillTool",

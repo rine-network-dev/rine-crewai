@@ -1,8 +1,10 @@
-"""Behavioral tests for the discovery tools.
+"""Behavioral tests for the discovery + self-identity tools.
 
 ``rine_discover`` and ``rine_inspect`` hit the UNAUTHENTICATED directory
 endpoints — no OAuth token is fetched. Asserted by NOT mocking ``/oauth/token``
-and confirming the calls still succeed.
+and confirming the calls still succeed. ``rine_whoami`` is the exception in this
+module: it reads the caller's OWN org and agents, so it is authenticated and the
+token mock is required.
 """
 
 from __future__ import annotations
@@ -10,9 +12,9 @@ from __future__ import annotations
 import httpx
 import respx
 
-from crewai_rine import RineDiscoverTool, RineInspectTool
+from crewai_rine import RineDiscoverTool, RineInspectTool, RineWhoamiTool
 
-from .conftest import API_URL, OTHER_AGENT_ID
+from .conftest import AGENT_PAYLOAD, API_URL, OTHER_AGENT_ID, mock_agents, mock_token
 
 
 class TestRineDiscoverTool:
@@ -49,7 +51,7 @@ class TestRineDiscoverTool:
 
     @respx.mock
     def test_discover_unverified_agent_renders_unverified_not_verified(self, config_dir):
-        """L3: an unverified directory hit renders 'unverified', never 'verified'.
+        """An unverified directory hit renders 'unverified', never 'verified'.
 
         With no trust_tier/category/description either, a constant 'verified' render
         would mislead the LLM into trusting an unvetted agent; this pins the negative
@@ -140,7 +142,7 @@ class TestRineInspectTool:
 
     @respx.mock
     def test_inspect_unverified_agent_renders_false_and_none_placeholders(self, config_dir):
-        """L3: an unverified profile renders 'verified: False' + '(none)' placeholders.
+        """An unverified profile renders 'verified: False' + '(none)' placeholders.
 
         With no category/description/trust_tier, these are the negative branches a
         constant 'verified' or a hardcoded field would silently break.
@@ -201,3 +203,73 @@ class TestRineInspectTool:
         RineInspectTool(config_dir=config_dir, api_url=API_URL).run(handle_or_id=OTHER_AGENT_ID)
 
         assert "authorization" not in {k.lower() for k in route.calls[0].request.headers}
+
+
+ORG_PAYLOAD = {
+    "id": "99999999-8888-7777-6666-555555555555",
+    "name": "My Org",
+    "slug": "myorg",
+    "trust_tier": 2,
+    "agent_count": 1,
+    "created_at": "2024-01-01T00:00:00Z",
+}
+
+
+class TestRineWhoamiTool:
+    @respx.mock
+    def test_whoami_renders_org_slug_trust_tier_and_live_handles(self, config_dir):
+        """The four fields the description promises all reach the string."""
+        mock_token()
+        mock_agents()
+        route = respx.get(f"{API_URL}/org").mock(
+            return_value=httpx.Response(200, json=ORG_PAYLOAD)
+        )
+
+        out = RineWhoamiTool(config_dir=config_dir, api_url=API_URL).run()
+
+        assert route.called
+        assert "org: My Org" in out
+        assert "org_slug: myorg" in out
+        assert "trust_tier: 2" in out
+        assert "test-agent@myorg.rine.network" in out
+
+    @respx.mock
+    def test_whoami_omits_a_revoked_handle(self, config_dir):
+        """A revoked handle can neither send nor be sent to, so it is not offered.
+
+        Listing it would hand the model an address every send to which fails.
+        """
+        mock_token()
+        respx.get(f"{API_URL}/agents").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "items": [
+                        AGENT_PAYLOAD,
+                        {
+                            **AGENT_PAYLOAD,
+                            "id": OTHER_AGENT_ID,
+                            "handle": "retired@myorg.rine.network",
+                            "revoked_at": "2024-06-01T00:00:00Z",
+                        },
+                    ]
+                },
+            )
+        )
+        respx.get(f"{API_URL}/org").mock(return_value=httpx.Response(200, json=ORG_PAYLOAD))
+
+        out = RineWhoamiTool(config_dir=config_dir, api_url=API_URL).run()
+
+        assert "test-agent@myorg.rine.network" in out
+        assert "retired@myorg.rine.network" not in out
+
+    @respx.mock
+    def test_whoami_api_error_returns_a_formatted_string_not_a_raise(self, config_dir):
+        """A failed identity read surfaces as a tool message so the crew continues."""
+        mock_token()
+        mock_agents()
+        respx.get(f"{API_URL}/org").mock(return_value=httpx.Response(500, json={"detail": "boom"}))
+
+        out = RineWhoamiTool(config_dir=config_dir, api_url=API_URL).run()
+
+        assert "500" in out

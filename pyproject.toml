@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crewai-rine"
-version = "0.3.0"
+version = "0.5.0"
 description = "Native CrewAI tools for the Rine network — send, receive, discover, and run E2E-encrypted agent-to-agent conversations and groups from a CrewAI crew"
 readme = "README.md"
 license = "EUPL-1.2"
@@ -26,13 +26,25 @@ dependencies = [
     # Dev/CI consume the LOCAL rine-sdk (editable path dep injected inside the rig,
     # see compose.crewai.yml + Dockerfile) — it carries unreleased fixes. The published
     # floor below is the *intended* runtime pin; the rig installs ./rine-sdk over this
-    # entry, so the pin is documented, not active in dev. Floored at 0.8.0 so the x402
-    # payee orchestrator (rine.x402.payee.fulfill) the rine_fulfill tool wraps is
-    # guaranteed present; pip is uncapped, so a fresh install resolves the newest rine.
-    # `[payments]` extra pulls the wallet-signing deps the rine_pay / rine_fulfill tools
-    # need (EIP-3009 authorization signing); rine.x402 imports cleanly without it but the
-    # pay/fulfill paths raise a friendly error until it is present.
-    "rine[payments]>=0.9.0",  # PUBLISHED FLOOR: first rine on the rine-mls core (pre-0.9 lacks the native wheel these tools now need).
+    # entry, so the pin is documented, not active in dev. The `[payments]` extra pulls
+    # the wallet-signing deps the rine_pay / rine_fulfill tools need (EIP-3009
+    # authorization signing); rine.x402 imports cleanly without it but the pay/fulfill
+    # paths raise a friendly error until it is present.
+    #
+    # PUBLISHED FLOOR 0.11.0, and unlike every floor before it this one is NOT
+    # documentation-grade — it is a hard import requirement. These tools import names the
+    # SDK first exported in 0.11.0 (`describe_mls_admission`, `own_agents_clause`,
+    # `admission_headline`, `VOTE_ELECTORATE_RULE`, `GROUP_ROSTER_LEAD` among others), so
+    # against 0.10.0 `import crewai_rine` raises ImportError at module scope. Lower this
+    # floor and the package does not fail a call — it fails to load.
+    #
+    # 0.11.0 also inherits 0.10.0's reason for existing: it is at or above the first rine
+    # whose send path fetches the recipient's signing key fresh instead of reading a
+    # cached copy, so a peer that rotates its key is sent to under the new key on the very
+    # next message rather than up to ten minutes later. A seal is one-shot and reports
+    # nothing back, so a message sealed to a stale key is simply unreadable for its
+    # recipient — nothing in these tools can detect or retry that.
+    "rine[payments]>=0.11.0",
     "crewai>=1.14,<2.0",
     "pydantic>=2.0",
 ]
@@ -89,9 +101,25 @@ ignore = ["D100"]
 convention = "google"
 
 [tool.mypy]
+# The type gate checks the LOWEST interpreter this package supports, so
+# `requires-python = ">=3.11"` above is a claim the gate actually validates. The
+# rig's own interpreter is 3.12 (Dockerfile FROM python:3.12-slim); checking at
+# 3.11 there is exactly the point — a 3.12-only construct in this package is a
+# type error a 3.12-only gate would wave through.
 python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
 packages = ["crewai_rine"]
 mypy_path = "src"
+
+# numpy's installed stub uses PEP 695 `type X = …`, which mypy refuses to parse
+# under `python_version = 3.11`. That is a syntax error in a THIRD-PARTY stub,
+# and mypy treats it as fatal — "errors prevented further checking" — so the
+# whole gate aborts before it reads a line of crewai_rine. Skipping the import
+# (numpy is a transitive dependency of crewai's vector-store tree; this package
+# never names it) keeps the gate running at the floor it ships.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true

@@ -84,7 +84,7 @@ def _mock_send_to_self(config_dir):
 
     The listener is pointed at the caller agent's own UUID, so no WebFinger is
     needed and the posted ``encrypted_payload`` is HPKE-sealed to a key we hold —
-    letting a test decrypt the *actual notification text* off the wire (L1).
+    letting a test decrypt the *actual notification text* off the wire.
     """
     mock_token()
     mock_agents()
@@ -126,7 +126,7 @@ class TestRineNotificationListener:
 
     @respx.mock
     def test_listener_completed_notification_body_carries_crew_and_verb(self, config_dir):
-        """L1: the decrypted wire body contains the crew name + 'completed:' verb + summary."""
+        """The decrypted wire body contains the crew name + 'completed:' verb + summary."""
         route = _mock_send_to_self(config_dir)
 
         with crewai_event_bus.scoped_handlers():
@@ -143,7 +143,7 @@ class TestRineNotificationListener:
 
     @respx.mock
     def test_listener_failed_notification_body_carries_crew_and_error(self, config_dir):
-        """L1: the decrypted wire body contains the crew name + 'failed:' verb + error."""
+        """The decrypted wire body contains the crew name + 'failed:' verb + error."""
         route = _mock_send_to_self(config_dir)
 
         with crewai_event_bus.scoped_handlers():
@@ -186,7 +186,7 @@ class TestRineNotificationListener:
     def test_listener_swallows_send_failure_without_crashing_crew(self, config_dir):
         """A send failure inside the handler must NOT propagate, but it must fire.
 
-        L4: the recipient-key fetch 500s → send() raises internally; the handler
+        The recipient-key fetch 500s → send() raises internally; the handler
         swallows it. Asserting the failing route WAS called proves a send was
         actually attempted (a handler that silently never fired would also "not
         raise" — that weaker pass is what this guards against).
@@ -211,7 +211,7 @@ class TestRineNotificationListener:
     def test_listener_swallows_config_failure_without_crashing_crew(self, tmp_path, caplog):
         """A listener with no credentials at all still swallows the event cleanly.
 
-        L4: this variant fails before any HTTP (no creds → client build / send
+        This variant fails before any HTTP (no creds → client build / send
         raises locally), so there is no route to assert. Instead assert the
         handler's debug-log swallow actually fired — proving the handler ran and
         caught the failure rather than silently not registering.
