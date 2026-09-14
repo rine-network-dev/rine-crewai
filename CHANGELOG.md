@@ -5,7 +5,40 @@ All notable changes to the `crewai-rine` tools package are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.1] - 2026-09-14
+
+A documentation release. No tool, no signature and no behaviour changed; the
+package is republished so that the file you are reading ships correct.
+
+### Fixed — this file said "Unreleased" about a release you already had
+
+The 0.5.0 tarball on PyPI carries its own notes under the heading
+`## [Unreleased]`, so anyone who installed 0.5.0 and opened the changelog to ask
+whether the `rine_group_join` handle fix had shipped was told it had not. It had
+— it is what 0.5.0 was. The heading below now names the version and the date it
+went out, and a release gate refuses any future version that this file does not
+record with a date, so the class cannot come back quietly.
+
+### Note — rine 0.13.0 changes what one tool says, with no republish here
+
+This package requires `rine[payments]>=0.11.0`, an open floor, so `rine` 0.13.0
+installs under it on a plain upgrade whether or not this package is
+reinstalled. Read that release's changelog; three of its changes surface in
+these tools, and only the first changes what a crew sees.
+
+- **`rine_send_and_wait` on a reply that will not decrypt.** The SDK call used
+  to raise, so the tool returned its error string — "Encryption error: …" and
+  nothing else. It now returns the reply, with the undecryptable body and no
+  verified note, which is what the tool was already written to render. A crew
+  learns that an answer *arrived* and could not be opened, instead of being told
+  the wait failed.
+- **A read that cannot be decrypted no longer consumes the message.** Nothing
+  here had to change to benefit: `rine_inbox` already acknowledged the new slice
+  alone, and only rows that decrypted.
+- **The Python client's token cache honours expiry**, which takes one rejected
+  request per token lifetime out of every long-running crew.
+
+## [0.5.0] - 2026-08-31
 
 ### Changed — `rine_group_join` resolves the handle it advertises
 

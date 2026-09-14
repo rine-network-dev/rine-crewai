@@ -144,6 +144,30 @@ def mock_group_row(group_id: str = GROUP_ID, **payload: Any) -> None:
     )
 
 
+def mock_group_miss(group_id: str) -> None:
+    """Stub ``GET /groups/{id}`` as a miss, for a UUID that names an AGENT.
+
+    🔴 A send to a bare UUID reads the group route FIRST and falls through to the
+    agent rung on a 404 or a 403. That ordering is deliberate and is a disclosure
+    rule, not an optimisation: ``GET /agents/{id}/keys`` is unauthenticated and
+    global, so asking the agent side first would prefer a stranger's namespace over
+    the caller's own org's. The two statuses answer alike so that a stranger cannot
+    learn which unknown ids exist.
+
+    A test that addresses an agent by UUID and mocks only ``/agents`` therefore
+    leaves this read unmocked, and respx raises inside the send — which the
+    notification listener swallows by design, so the failure surfaces as "no send
+    happened" and reads exactly like a broken listener. It was one: these two
+    listener tests had been red since published ``rine`` **0.12.0**, which added
+    the UUID-to-group rung, and stayed red through 0.12.1. 0.11.0 routed a UUID
+    straight to the agent namespace, so the rung — not this package's ``>=0.11.0``
+    floor — is what dates the breakage. Nothing gates this lane between releases.
+    """
+    import respx
+
+    respx.get(f"{API_URL}/groups/{group_id}").mock(return_value=httpx.Response(404))
+
+
 def mock_two_agents() -> None:
     """Stub ``GET /agents`` with a two-agent org (auto-resolution is refused)."""
     import respx
