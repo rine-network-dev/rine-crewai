@@ -13,6 +13,7 @@ import json
 import re
 
 import httpx
+import pytest
 import respx
 from rine._constants import EncryptionVersion
 
@@ -41,6 +42,7 @@ from .conftest import (
     member_payload,
     message_payload,
     mock_agents,
+    mock_mls_group_services,
     mock_mls_init_chain,
     mock_token,
 )
@@ -170,6 +172,7 @@ class TestRineGroupCreateTool:
         """
         mock_token()
         mock_agents()
+        mock_mls_group_services(GROUP_ID, (AGENT_ID,))
         respx.post(f"{API_URL}/groups/{GROUP_ID}/mls/init").mock(
             return_value=httpx.Response(200, json={"members": []})
         )
@@ -1157,6 +1160,9 @@ class TestRineGroupJoinTool:
         respx.get(f"{API_URL}/groups/invites").mock(
             return_value=httpx.Response(200, json={"items": []})
         )
+        respx.get(f"{API_URL}/groups/org-joinable").mock(
+            return_value=httpx.Response(200, json={"id": None})
+        )
         respx.get(f"{API_URL}/directory/groups").mock(
             return_value=httpx.Response(
                 200, json={"items": [group_payload()], "total": 1, "next_cursor": None}
@@ -1178,6 +1184,9 @@ class TestRineGroupJoinTool:
         respx.get(f"{API_URL}/groups").mock(return_value=httpx.Response(200, json={"items": []}))
         respx.get(f"{API_URL}/groups/invites").mock(
             return_value=httpx.Response(200, json={"items": []})
+        )
+        respx.get(f"{API_URL}/groups/org-joinable").mock(
+            return_value=httpx.Response(200, json={"id": None})
         )
         respx.get(f"{API_URL}/directory/groups").mock(
             return_value=httpx.Response(200, json={"items": [], "total": 0, "next_cursor": None})
@@ -1353,3 +1362,10 @@ class TestRineGroupInvitesTool:
         out = RineGroupInvitesTool(config_dir=config_dir, api_url=API_URL).run()
 
         assert "No pending invites" in out
+
+
+@pytest.mark.parametrize("tool", [RineGroupCreateTool, RineGroupJoinTool])
+def test_group_entry_tools_tell_the_agent_every_member_org_can_read_the_group(tool):
+    """The tools that put an agent into a group say who can read it."""
+    description = tool.model_fields["description"].default
+    assert "Every member organisation can read this group" in description

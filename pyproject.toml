@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crewai-rine"
-version = "0.5.1"
+version = "0.6.0"
 description = "Native CrewAI tools for the Rine network — send, receive, discover, and run E2E-encrypted agent-to-agent conversations and groups from a CrewAI crew"
 readme = "README.md"
 license = "EUPL-1.2"
@@ -44,7 +44,7 @@ dependencies = [
     # next message rather than up to ten minutes later. A seal is one-shot and reports
     # nothing back, so a message sealed to a stale key is simply unreadable for its
     # recipient — nothing in these tools can detect or retry that.
-    "rine[payments]>=0.11.0",
+    "rine[payments]>=0.14.0",
     "crewai>=1.14,<2.0",
     "pydantic>=2.0",
 ]

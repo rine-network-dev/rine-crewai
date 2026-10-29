@@ -1,7 +1,7 @@
 """Behavioral tests for the x402 payment tools.
 
 Both tools are exercised through their public CrewAI interface (``tool.run(...)``);
-assertions are on the returned ``status: <status> — <detail>`` string, the seven-status
+assertions are on the returned ``status: <status> — <detail>`` string, the nine-status
 vocabulary, and observable HTTP. Only the rine HTTP boundary and the facilitator HTTP
 boundary are mocked (respx) — the SDK signing/policy/journal + real HPKE round-trip run.
 
@@ -17,10 +17,19 @@ import json
 import httpx
 import respx
 from rine._constants import EncryptionVersion, MessageType
-from rine.x402 import build_payment_required, create_wallet, save_policy
+from rine.testing import WORLD
+from rine.x402 import (
+    X402Error,
+    X402ErrorCode,
+    build_payment_required,
+    create_wallet,
+    read_daily_spent,
+    save_policy,
+)
 from rine.x402.types import X402_QUOTE_REF_KEY, PaymentPolicy
 
 from crewai_rine import RineFulfillTool, RinePayTool
+from crewai_rine.tools import _x402_status as st
 
 from .conftest import (
     AGENT_ID,
@@ -43,25 +52,10 @@ FAC_URL = "https://facilitator.test"
 QUOTE_ID = "cccccccc-dddd-eeee-ffff-000000000003"
 
 
-def _self_keys_json(config_dir):
-    from rine._crypto.keys import (
-        encryption_public_key_to_jwk,
-        load_agent_keys,
-        signing_public_key_to_jwk,
-    )
-
-    keys = load_agent_keys(config_dir, AGENT_ID)
-    return {
-        "agent_id": AGENT_ID,
-        "encryption_public_key": encryption_public_key_to_jwk(keys.encryption.public_key),
-        "signing_public_key": signing_public_key_to_jwk(keys.signing.public_key),
-    }
-
-
 def _mock_self_keys(config_dir):
     """AGENT_ID is both quote-sender (verify) and reply-recipient (encrypt) in these tests."""
     respx.get(f"{API_URL}/agents/{AGENT_ID}/keys").mock(
-        return_value=httpx.Response(200, json=_self_keys_json(config_dir))
+        return_value=httpx.Response(200, json=WORLD.keys_response(AGENT_ID))
     )
 
 
@@ -108,7 +102,7 @@ def _mock_quote(config_dir, amount="100000"):
         return_value=httpx.Response(
             200,
             json=message_payload(
-                encryption_version=EncryptionVersion.HPKE_V1,
+                encryption_version=EncryptionVersion.HPKE_HYBRID_V2,
                 encrypted_payload=_quote_wire(config_dir, amount),
                 msg_type=MessageType.X402_PAYMENT_REQUIRED,
             ),
@@ -188,7 +182,7 @@ class TestRinePayTool:
             return_value=httpx.Response(
                 200,
                 json=message_payload(
-                    encryption_version=EncryptionVersion.HPKE_V1,
+                    encryption_version=EncryptionVersion.HPKE_HYBRID_V2,
                     encrypted_payload=hpke_self_encrypt(config_dir, {"text": "not a quote"}),
                     msg_type=MessageType.TASK_REQUEST,
                 ),
@@ -275,6 +269,30 @@ class TestRinePayTool:
         assert paid.startswith("status: payment-submitted — ")
 
     @respx.mock
+    def test_pay_when_quote_sender_key_unreadable_returns_sender_unverifiable(self, config_dir):
+        """A quote whose sender cannot be verified is never signed against or debited."""
+        mock_token()
+        mock_agents()
+        _payer_policy(config_dir)
+        _mock_quote(config_dir)
+        respx.get(f"{API_URL}/agents/{AGENT_ID}/keys").mock(
+            return_value=httpx.Response(404, json={"detail": "not found"})
+        )
+        reply = respx.post(f"{API_URL}/messages/{MESSAGE_ID}/reply").mock(
+            return_value=httpx.Response(200, json={**sent_message_payload(), "id": REPLY_ID})
+        )
+
+        out = _pay_tool(config_dir).run(message_id=MESSAGE_ID)
+
+        assert out.startswith("status: sender-unverifiable — ")
+        assert not reply.called
+        assert read_daily_spent(config_dir, AGENT_ID) == 0
+
+    def test_map_x402_error_when_quote_not_signed_by_sender_returns_inauthentic_quote(self):
+        err = X402Error(X402ErrorCode.INAUTHENTIC_SENDER, "re-sealed")
+        assert st.map_x402_error(err) == "status: inauthentic-quote — re-sealed"
+
+    @respx.mock
     def test_pay_never_raises_on_error(self, config_dir):
         mock_token()
         mock_agents()
@@ -322,7 +340,7 @@ def _mock_payment(config_dir, *, quote_ref=QUOTE_ID):
         return_value=httpx.Response(
             200,
             json=message_payload(
-                encryption_version=EncryptionVersion.HPKE_V1,
+                encryption_version=EncryptionVersion.HPKE_HYBRID_V2,
                 encrypted_payload=_payment_wire(config_dir, quote_ref=quote_ref),
                 msg_type=MessageType.X402_PAYMENT,
             ),
@@ -343,7 +361,7 @@ def _mock_referenced_quote(config_dir):
             200,
             json={
                 **message_payload(
-                    encryption_version=EncryptionVersion.HPKE_V1,
+                    encryption_version=EncryptionVersion.HPKE_HYBRID_V2,
                     encrypted_payload="ZHVtbXk=",  # payer's copy — unreadable to the payee
                     msg_id=QUOTE_ID,
                     msg_type=MessageType.X402_PAYMENT_REQUIRED,
@@ -397,6 +415,26 @@ class TestRineFulfillTool:
             c.request.url.path for c in respx.calls if c.request.url.host == "facilitator.test"
         ]
         assert paths == ["/verify", "/settle"]
+
+    @respx.mock
+    def test_fulfill_when_payment_sender_key_unreadable_returns_sender_unverifiable(
+        self, config_dir
+    ):
+        """A sender check that could not run settles nothing and sends no receipt."""
+        mock_token()
+        mock_agents()
+        _mock_payment(config_dir)
+        respx.get(f"{API_URL}/agents/{AGENT_ID}/keys").mock(
+            return_value=httpx.Response(404, json={"detail": "not found"})
+        )
+        facilitator = respx.post(url__startswith=FAC_URL)
+        reply = respx.post(f"{API_URL}/messages/{MESSAGE_ID}/reply")
+
+        out = _fulfill_tool(config_dir).run(message_id=MESSAGE_ID)
+
+        assert out.startswith("status: sender-unverifiable — ")
+        assert not facilitator.called
+        assert not reply.called
 
     @respx.mock
     def test_fulfill_receipt_marker_is_status_and_rail_only(self, config_dir):
@@ -486,7 +524,7 @@ class TestRineFulfillTool:
             return_value=httpx.Response(
                 200,
                 json=message_payload(
-                    encryption_version=EncryptionVersion.HPKE_V1,
+                    encryption_version=EncryptionVersion.HPKE_HYBRID_V2,
                     encrypted_payload=hpke_self_encrypt(config_dir, {"text": "hi"}),
                     msg_type=MessageType.TASK_REQUEST,
                 ),

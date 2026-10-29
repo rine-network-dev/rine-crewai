@@ -1,16 +1,16 @@
-"""The ``rine_pay`` seven-status vocabulary + parseable refusal encoding.
+"""The ``rine_pay`` nine-status vocabulary + parseable refusal encoding.
 
-Reused VERBATIM from the MCP ``rine_pay`` tool (``rine-mcp/src/tools/payments.ts:39-47``)
-so the agent-facing payment contract is identical on every surface. Payer refusals are
-returned as the stable, parseable string ``status: <status> — <detail>``; amounts are
-never leaked into a status line.
+Reused VERBATIM from the MCP ``rine_pay`` tool (``PAY_STATUS``,
+``rine-mcp/src/tools/x402-quote.ts``) so the agent-facing payment contract is identical
+on every surface. Payer refusals are returned as the stable, parseable string
+``status: <status> — <detail>``; amounts are never leaked into a status line.
 """
 
 from __future__ import annotations
 
 from rine.x402 import X402Error, X402ErrorCode
 
-# The seven terminal statuses, verbatim.
+# The nine terminal statuses, verbatim.
 SUBMITTED = "payment-submitted"
 NO_WALLET = "no-wallet"
 NOT_PAYMENT_REQUIRED = "not-payment-required"
@@ -18,6 +18,8 @@ POLICY_REFUSED = "policy-refused"
 ABOVE_THRESHOLD = "above-auto-pay-threshold"
 ALREADY_PAID = "already-paid"
 WALLET_BUSY = "wallet-busy"
+INAUTHENTIC_QUOTE = "inauthentic-quote"
+SENDER_UNVERIFIABLE = "sender-unverifiable"
 
 
 def status_line(status: str, detail: str) -> str:
@@ -26,11 +28,15 @@ def status_line(status: str, detail: str) -> str:
 
 
 def map_x402_error(err: X402Error) -> str:
-    """Map a payer ``X402Error`` code onto the seven-status vocabulary (parity with MCP)."""
+    """Map a payer ``X402Error`` code onto the nine-status vocabulary (parity with MCP)."""
     if err.code == X402ErrorCode.ALREADY_PAID:
         return status_line(ALREADY_PAID, err.message)
     if err.code == X402ErrorCode.WALLET_BUSY:
         return status_line(WALLET_BUSY, err.message)
+    if err.code == X402ErrorCode.INAUTHENTIC_SENDER:
+        return status_line(INAUTHENTIC_QUOTE, err.message)
+    if err.code == X402ErrorCode.SENDER_UNVERIFIABLE:
+        return status_line(SENDER_UNVERIFIABLE, err.message)
     # Every remaining code is a deny-by-default policy refusal. `select_requirement`
     # wraps the specific per-candidate rejection (no-policy / per-tx-cap-exceeded /
     # asset-not-allowed / …) in `details["reason"]`; surface THAT actionable code, not
@@ -48,6 +54,8 @@ __all__ = [
     "ABOVE_THRESHOLD",
     "ALREADY_PAID",
     "WALLET_BUSY",
+    "INAUTHENTIC_QUOTE",
+    "SENDER_UNVERIFIABLE",
     "status_line",
     "map_x402_error",
 ]

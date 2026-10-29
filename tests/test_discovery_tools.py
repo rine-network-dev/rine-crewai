@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import httpx
 import respx
+from rine.testing import WORLD
 
 from crewai_rine import RineDiscoverTool, RineInspectTool, RineWhoamiTool
 
-from .conftest import AGENT_PAYLOAD, API_URL, OTHER_AGENT_ID, mock_agents, mock_token
+from .conftest import AGENT_ID, AGENT_PAYLOAD, API_URL, OTHER_AGENT_ID, mock_token
 
 
 class TestRineDiscoverTool:
@@ -206,7 +207,7 @@ class TestRineInspectTool:
 
 
 ORG_PAYLOAD = {
-    "id": "99999999-8888-7777-6666-555555555555",
+    "id": WORLD.org_id,
     "name": "My Org",
     "slug": "myorg",
     "trust_tier": 2,
@@ -215,15 +216,26 @@ ORG_PAYLOAD = {
 }
 
 
+def mock_whoami(agents: list[dict] | None = None):
+    """Stub ``GET /whoami`` as the agent principal; return the route."""
+    return respx.get(f"{API_URL}/whoami").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "org": ORG_PAYLOAD,
+                "principal": {"kind": "agent", "branch": "main", "agent_id": AGENT_ID},
+                "agents": [AGENT_PAYLOAD] if agents is None else agents,
+            },
+        )
+    )
+
+
 class TestRineWhoamiTool:
     @respx.mock
     def test_whoami_renders_org_slug_trust_tier_and_live_handles(self, config_dir):
         """The four fields the description promises all reach the string."""
         mock_token()
-        mock_agents()
-        route = respx.get(f"{API_URL}/org").mock(
-            return_value=httpx.Response(200, json=ORG_PAYLOAD)
-        )
+        route = mock_whoami()
 
         out = RineWhoamiTool(config_dir=config_dir, api_url=API_URL).run()
 
@@ -240,23 +252,17 @@ class TestRineWhoamiTool:
         Listing it would hand the model an address every send to which fails.
         """
         mock_token()
-        respx.get(f"{API_URL}/agents").mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "items": [
-                        AGENT_PAYLOAD,
-                        {
-                            **AGENT_PAYLOAD,
-                            "id": OTHER_AGENT_ID,
-                            "handle": "retired@myorg.rine.network",
-                            "revoked_at": "2024-06-01T00:00:00Z",
-                        },
-                    ]
+        mock_whoami(
+            [
+                AGENT_PAYLOAD,
+                {
+                    **AGENT_PAYLOAD,
+                    "id": OTHER_AGENT_ID,
+                    "handle": "retired@myorg.rine.network",
+                    "revoked_at": "2024-06-01T00:00:00Z",
                 },
-            )
+            ]
         )
-        respx.get(f"{API_URL}/org").mock(return_value=httpx.Response(200, json=ORG_PAYLOAD))
 
         out = RineWhoamiTool(config_dir=config_dir, api_url=API_URL).run()
 
@@ -267,8 +273,9 @@ class TestRineWhoamiTool:
     def test_whoami_api_error_returns_a_formatted_string_not_a_raise(self, config_dir):
         """A failed identity read surfaces as a tool message so the crew continues."""
         mock_token()
-        mock_agents()
-        respx.get(f"{API_URL}/org").mock(return_value=httpx.Response(500, json={"detail": "boom"}))
+        respx.get(f"{API_URL}/whoami").mock(
+            return_value=httpx.Response(500, json={"detail": "boom"})
+        )
 
         out = RineWhoamiTool(config_dir=config_dir, api_url=API_URL).run()
 

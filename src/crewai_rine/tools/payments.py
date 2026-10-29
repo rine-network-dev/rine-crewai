@@ -11,7 +11,7 @@ orchestrator. rine stays a pure metadata relay: verify/settle is plain external 
 to the caller-configured facilitator, never a rine route. Wallet keys never surface.
 
 Refusals are returned as a stable, parseable string — ``status: <status> — <detail>``
-— reusing the ``rine_pay`` seven-status vocabulary verbatim, never leaking amounts.
+— reusing the ``rine_pay`` nine-status vocabulary verbatim, never leaking amounts.
 """
 
 import asyncio
@@ -22,6 +22,7 @@ from rine import RineClient
 from rine.x402 import (
     FacilitatorClient,
     X402Error,
+    X402ErrorCode,
     fulfill,
     is_auto_payable,
     load_policy,
@@ -52,8 +53,10 @@ class RinePayTool(BaseRineTool):
         "fails, and there is no refund), and replies with the signed rine.v1.x402_payment. "
         "Returns a typed `status: <status> — <detail>` string — `payment-submitted` on "
         "success, else `no-wallet` / `not-payment-required` / `policy-refused` / "
-        "`above-auto-pay-threshold` / `already-paid` / `wallet-busy`. Does NOT wait for "
-        "settlement: the receipt arrives later as an ordinary inbox message."
+        "`above-auto-pay-threshold` / `already-paid` / `wallet-busy` / `inauthentic-quote` "
+        "(the quote was not signed by the agent that sent it) / `sender-unverifiable` (the "
+        "sender check could not run: nothing was paid, retry later). "
+        "Does NOT wait for settlement: the receipt arrives later as an ordinary inbox message."
     )
     args_schema: type[BaseModel] = RinePayInput
 
@@ -102,6 +105,7 @@ class RinePayTool(BaseRineTool):
                 config_dir,
                 agent_id,
                 pr,
+                quote=quote,
                 message_id=message_id,
                 force=allow_repay,
                 add_marker=emit_marker,
@@ -136,6 +140,8 @@ class RineFulfillTool(BaseRineTool):
         "facilitator (plain external HTTP — rine never touches funds), and replies with a "
         "rine.v1.x402_receipt in-thread. A failed verification is a business outcome, not an "
         "error: settle is skipped and a payment-failed receipt is still threaded back. "
+        "If the payment's sender cannot be checked, it returns `status: sender-unverifiable` "
+        "with nothing settled or sent: retry later. "
         "Configure the facilitator via the tool's `facilitator` / `facilitator_url` fields."
     )
     args_schema: type[BaseModel] = RineFulfillInput
@@ -153,6 +159,8 @@ class RineFulfillTool(BaseRineTool):
             resolve_base_url(self.facilitator, self.facilitator_url)
             result = asyncio.run(self._fulfill(message_id, emit_marker))
         except X402Error as err:
+            if err.code == X402ErrorCode.SENDER_UNVERIFIABLE:
+                return st.status_line(st.SENDER_UNVERIFIABLE, err.message)
             return st.status_line(st.NOT_PAYMENT_REQUIRED, f"{err.code}: {err.message}")
         except ValueError as err:  # unknown/incomplete facilitator preset
             return str(err)
@@ -178,7 +186,7 @@ class RineFulfillTool(BaseRineTool):
         crewai tools are sync (SyncRineClient) but ``rine.x402.fulfill`` is async and
         needs an async client + facilitator, so this runs inside ``asyncio.run``.
         """
-        overrides: dict[str, Any] = {}
+        overrides: dict[str, Any] = {"agent_only": True}
         if self.config_dir is not None:
             overrides["config_dir"] = self.config_dir
         if self.api_url is not None:

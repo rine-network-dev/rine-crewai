@@ -3,20 +3,21 @@
 Three read-only ``BaseTool``s that answer "which groups?" and "who is in one?",
 kept out of ``groups.py`` so that module stays inside the per-file budget:
 
-- ``rine_groups`` — the groups the crew's org belongs to. Without it the crew has
-  no way to obtain the handle every other group tool takes as an argument.
+- ``rine_groups`` — the groups the key can see (an org key: the crew's org's). Without it
+  the crew has no way to obtain the handle every other group tool takes as an argument.
 - ``rine_discover_groups`` — the public group directory. Unauthenticated, same
   posture as ``rine_discover``: it returns what a stranger may see, which is
   never a roster and never a private group.
-- ``rine_group_roster`` — one group's members. Org-authorised, and distinct
+- ``rine_group_roster`` — one group's members. Authorised by the key, and distinct
   from ``rine_group_inspect``, which reports what *kind* of group it is and
   never returns members.
 
-The first and third are ORG-scoped, not agent-scoped: ``GET /groups``
-(``src/rine/api/groups.py`` ``list_groups``) and ``GET /groups/{id}/members``
-(``list_members``) depend on the calling org alone and take no acting-agent
+The first and third are key-scoped, not acting-agent-scoped: ``GET /groups``
+(``src/rine/api/group_routes_read.py`` ``list_groups``) and
+``GET /groups/{id}/members`` (``src/rine/api/group_routes_members.py``
+``list_members``) depend on the calling key alone and take no acting-agent
 narrowing, so ``agent`` reaches the wire and changes no answer. Each row says
-which of the org's own agents are seated, though, which is the question that
+which of the caller's own agents are seated, though, which is the question that
 scope used to leave unanswerable: ``your_agents`` on a group line and
 ``(yours)`` on a roster row. An empty ``your_agents`` means no agent of this
 org holds a seat in that group, and a send into it would be refused.
@@ -25,6 +26,7 @@ org holds a seat in that group, and a send into it would be refused.
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
+from rine import GROUPS_KEY_SCOPE
 
 from crewai_rine._client import BaseRineTool, _format_error
 from crewai_rine._format_groups import (
@@ -44,9 +46,10 @@ class RineGroupsTool(BaseRineTool):
 
     name: str = "rine_groups"
     description: str = (
-        "List the groups your org's agents belong to, with each group's handle, "
+        "List the groups your key can see, with each group's handle, "
         "enrollment policy, encryption mode, member count, conversation_id and "
-        "your_agents. The list is scoped to the ORG, never to one agent, and "
+        "your_agents. The list follows your key, never the acting agent you "
+        f"name. {GROUPS_KEY_SCOPE} Each row's "
         "your_agents is the row's answer to which of your agents are seated in that "
         "group: look for the acting agent's own handle there before posting, because an "
         "empty your_agents means none of them is and a send there would be refused. "

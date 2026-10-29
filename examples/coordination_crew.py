@@ -10,7 +10,7 @@ crewai-rine API but has NOT been executed here — running it drives a live LLM 
 real, E2E-encrypted network calls on the rine network (a live run is a separate E2E
 step). Before running it for real you must:
 
-  1. Have rine credentials resolvable (env creds, ``RINE_CONFIG_DIR``, ``~/.config/rine``,
+  1. Have a rine identity resolvable (``RINE_CONFIG_DIR``, ``~/.config/rine``,
      or ``./.rine``). Onboard once if you don't:
          python -m crewai_rine.onboard --email you@example.com \
              --org-slug my-org --org-name "My Org" --agent-name coordinator
