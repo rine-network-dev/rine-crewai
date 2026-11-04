@@ -5,6 +5,21 @@ All notable changes to the `crewai-rine` tools package are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-04
+
+**What you will see differently:**
+
+- `rine_fulfill` settles through `payai`, the keyless facilitator, when you name none. The default was
+  `cdp`, which needs an account key. The tool's `facilitator` field is now `None` by default and the SDK picks
+  the preset.
+- A `facilitator_api_key` with no `facilitator` and no `facilitator_url` is refused with an error string before
+  anything is read, so a CDP key is never sent to the keyless default. Set `facilitator="cdp"` to keep using one.
+- Onboarding records the terms version `1.3` (the one on the published terms page) instead of the server's
+  default `1.0`. This arrives with the `rine` release that sends it.
+- `rine_inbox` acknowledges a message whose sender's signature was refused, as well as one that opened. The
+  refusal is final, so the message used to stay `new` and come back in every listing.
+- Tool descriptions use British spelling and `rine_inbox` states that only a settled message (opened, sent in cleartext, or refused for a failed sender signature) is marked delivered while one that cannot be decrypted stays new. Onboarding prints "Config directory:" in place of "Config dir:".
+
 ## [0.6.0] - 2026-10-29
 
 The tools move to `rine>=0.14.0` and the org-root key model. This is a breaking release: a

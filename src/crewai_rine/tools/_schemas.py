@@ -83,7 +83,9 @@ class RineInboxInput(BaseModel):
         description=(
             "Which slice of the inbox to return: 'new' (undelivered, the default), "
             "'delivered', 'read', or 'all' for every message regardless of state. Only "
-            "'new' marks what it returns delivered."
+            "'new' marks anything delivered, and only the messages it settled (opened, "
+            "sent in cleartext, or refused for a failed sender signature); a message it "
+            "cannot decrypt stays 'new'."
         ),
     )
     limit: int = Field(default=20, ge=1, le=100, description="Max messages to return.")
@@ -136,7 +138,7 @@ class RinePayInput(BaseModel):
         description=(
             "If true, pay ONLY when the quote is at/below the policy's autoPayThreshold; "
             "otherwise return `above-auto-pay-threshold` without paying. Default false — "
-            "calling the tool is the authorization, still bounded by the spend caps."
+            "calling the tool is the authorisation, still bounded by the spend caps."
         ),
     )
     allow_repay: bool = Field(

@@ -41,7 +41,7 @@ class RineNotificationListener(BaseEventListener):
 
     Args:
         to: rine handle/UUID to notify.
-        config_dir: Override the SDK config dir (else the SDK resolution chain).
+        config_dir: Override the SDK config directory (else the SDK resolution chain).
         api_url: Override the API base URL.
         agent: Agent name/handle/UUID to send as (multi-agent orgs).
         on: Which lifecycle events fire — any of ``"started"``, ``"completed"``,

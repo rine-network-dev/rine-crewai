@@ -1,8 +1,8 @@
 """x402 payment tools — payer ``rine_pay`` + payee ``rine_fulfill``.
 
 Both are **Mutating** ``BaseTool``s: ``rine_pay`` signs an EIP-3009 stablecoin
-authorization and moves the daily spend budget (permanent debit); ``rine_fulfill``
-verifies + settles a received authorization on-chain via the payee's facilitator.
+authorisation and moves the daily spend budget (permanent debit); ``rine_fulfill``
+verifies + settles a received authorisation on-chain via the payee's facilitator.
 
 Thin adapters — **no** signing/policy/journal or verify→settle logic lives here.
 The payer wraps :func:`rine.x402.prepare_payment` (sign + reserve LAST, fail-closed)
@@ -47,7 +47,7 @@ class RinePayTool(BaseRineTool):
     name: str = "rine_pay"
     description: str = (
         "Pay a received x402 payment request (rine.v1.x402_payment_required) in-thread. "
-        "MUTATING: signs an EIP-3009 stablecoin authorization with the agent's wallet under "
+        "MUTATING: signs an EIP-3009 stablecoin authorisation with the agent's wallet under "
         "its local spend policy (deny-by-default, caps enforced), reserves the daily budget "
         "as the LAST act before sending (fail-closed — the debit stands even if the send "
         "fails, and there is no refund), and replies with the signed rine.v1.x402_payment. "
@@ -99,7 +99,7 @@ class RinePayTool(BaseRineTool):
                 if policy is None or not is_auto_payable(policy, requirement):
                     return st.status_line(
                         st.ABOVE_THRESHOLD,
-                        "Quote exceeds autoPayThreshold; re-run without auto_pay to authorize.",
+                        "Quote exceeds autoPayThreshold; re-run without auto_pay to authorise.",
                     )
             prepared = prepare_payment(
                 config_dir,
@@ -136,7 +136,7 @@ class RineFulfillTool(BaseRineTool):
     name: str = "rine_fulfill"
     description: str = (
         "Fulfil a received x402 payment (rine.v1.x402_payment) as the payee. MUTATING: "
-        "verifies the signed authorization then settles it ON-CHAIN via the configured "
+        "verifies the signed authorisation then settles it ON-CHAIN via the configured "
         "facilitator (plain external HTTP — rine never touches funds), and replies with a "
         "rine.v1.x402_receipt in-thread. A failed verification is a business outcome, not an "
         "error: settle is skipped and a payment-failed receipt is still threaded back. "
@@ -148,15 +148,18 @@ class RineFulfillTool(BaseRineTool):
 
     # Facilitator config is operator wiring (not an LLM per-call decision), so it lives
     # on the tool like config_dir/api_url. `facilitator` is a preset name (cdp/payai/
-    # x402-rs); `facilitator_url` overrides with an explicit base URL (self-hosted/mock).
-    facilitator: str = "cdp"
+    # x402-rs; None = the SDK's keyless default); `facilitator_url` overrides with an
+    # explicit base URL (self-hosted/mock).
+    facilitator: str | None = None
     facilitator_url: str | None = None
     facilitator_api_key: str | None = None
 
     def _run(self, message_id: str, emit_marker: bool = True) -> str:
         try:
             # Validate the facilitator target up front (clear error before any read).
-            resolve_base_url(self.facilitator, self.facilitator_url)
+            resolve_base_url(
+                self.facilitator, self.facilitator_url, api_key=self.facilitator_api_key
+            )
             result = asyncio.run(self._fulfill(message_id, emit_marker))
         except X402Error as err:
             if err.code == X402ErrorCode.SENDER_UNVERIFIABLE:

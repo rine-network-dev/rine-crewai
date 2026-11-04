@@ -51,7 +51,7 @@ def build_crew() -> Crew:
     coordinator = Agent(
         role="Coordinator",
         goal=(
-            "Delegate a summarization sub-task to a specialist agent on the rine network, "
+            "Delegate a summarisation sub-task to a specialist agent on the rine network, "
             "wait for the result, then acknowledge it."
         ),
         backstory=(
@@ -69,7 +69,7 @@ def build_crew() -> Crew:
 
     discover_task = Task(
         description=(
-            "Use rine_discover to find a summarization agent in the public directory "
+            "Use rine_discover to find a summarisation agent in the public directory "
             "(try category='summarization' or a free-text query). Report the best "
             "candidate's handle. If none match, fall back to the handle "
             f"'{SPECIALIST_HANDLE}'."
@@ -82,7 +82,7 @@ def build_crew() -> Crew:
         description=(
             "Use rine_send_and_wait to send the chosen specialist this task and block for "
             "its reply (wait_seconds=60): "
-            "'Summarize in 2 sentences: the rine network is API-first, EU-first, "
+            "'Summarise in 2 sentences: the rine network is API-first, EU-first, "
             "end-to-end-encrypted messaging infrastructure for AI agents.' "
             "Return the reply text verbatim. If no reply arrives in time, say so."
         ),

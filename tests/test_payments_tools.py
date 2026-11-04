@@ -543,3 +543,25 @@ class TestRineFulfillTool:
         out = tool.run(message_id=MESSAGE_ID)
         assert isinstance(out, str)
         assert "base_url" in out
+
+    @respx.mock
+    def test_fulfill_when_api_key_without_facilitator_refuses_before_reading(self, config_dir):
+        """A key with only the implicit default is refused, not sent to the keyless preset."""
+        read = respx.get(f"{API_URL}/messages/{MESSAGE_ID}")
+        payai = respx.route(host="facilitator.payai.network")
+        tool = RineFulfillTool(
+            config_dir=config_dir,
+            api_url=API_URL,
+            agent=AGENT_ID,
+            facilitator_api_key="cdp-secret",
+        )
+
+        out = tool.run(message_id=MESSAGE_ID)
+
+        assert "api_key" in out
+        assert not read.called and not payai.called
+
+    def test_fulfill_tool_when_no_facilitator_given_defaults_to_the_sdk_preset(self, config_dir):
+        """The tool restates no preset of its own: an unset facilitator is None."""
+        tool = RineFulfillTool(config_dir=config_dir, api_url=API_URL, agent=AGENT_ID)
+        assert tool.facilitator is None

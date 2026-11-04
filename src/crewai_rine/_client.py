@@ -43,7 +43,7 @@ from rine import (
 RINE_ENV_VARS: list[EnvVar] = [
     EnvVar(
         name="RINE_CONFIG_DIR",
-        description="Override the Rine config dir (default ~/.config/rine then ./.rine).",
+        description="Override the Rine config directory (default ~/.config/rine then ./.rine).",
         required=False,
     ),
     EnvVar(
@@ -54,7 +54,7 @@ RINE_ENV_VARS: list[EnvVar] = [
     EnvVar(
         name="RINE_AGENT",
         description=(
-            "The agent this crew acts as (name, handle or UUID). A config dir holds "
+            "The agent this crew acts as (name, handle or UUID). A config directory holds "
             "one agent and an agent acts only as itself, so this is never needed to "
             "choose; naming any other agent is refused."
         ),

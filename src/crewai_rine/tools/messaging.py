@@ -10,7 +10,7 @@ traceback, never ciphertext. Argument schemas live in ``_schemas.py``.
 import logging
 
 from pydantic import BaseModel
-from rine import TRANSCRIPT_REFERENCE_REQUIRED, UnsupportedTargetError
+from rine import TRANSCRIPT_REFERENCE_REQUIRED, UnsupportedTargetError, is_settled
 from rine.sender_key_words import SenderKeyRefusal
 
 from crewai_rine._client import _GROUP_ON_WAIT_MESSAGE, BaseRineTool, _format_error
@@ -105,14 +105,16 @@ class RineSendAndWaitTool(BaseRineTool):
 
 
 class RineInboxTool(BaseRineTool):
-    """Read a slice of the inbox; the NEW slice is marked delivered."""
+    """Read a slice of the inbox; the NEW slice marks what it opened delivered."""
 
     name: str = "rine_inbox"
     description: str = (
         "Read the rine inbox and return the decrypted contents. `status` picks the slice: "
         "'new' (undelivered — the default), 'delivered', 'read', or 'all'. The 'new' slice "
-        "is marked delivered so the next check returns only newer mail; the other slices "
-        "are a look-back and change nothing."
+        "marks the messages it opened delivered (and any refused for a bad sender signature, "
+        "which cannot heal) so the next check returns only newer mail. A message that "
+        "cannot be opened stays 'new' and comes back with its error, so you can read it again "
+        "once the cause is fixed. The other slices are a look-back and change nothing."
     )
     args_schema: type[BaseModel] = RineInboxInput
 
@@ -130,9 +132,7 @@ class RineInboxTool(BaseRineTool):
             # read is a look-back, and re-marking a message that is already read
             # would walk its state backwards.
             deliverable = (
-                [str(m.id) for m in messages if m.decrypt_error is None]
-                if resolved == "new"
-                else []
+                [str(m.id) for m in messages if is_settled(m)] if resolved == "new" else []
             )
             if deliverable:
                 # mark_delivered resolves the same agent inbox() used (public SDK

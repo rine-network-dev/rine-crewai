@@ -698,6 +698,45 @@ class TestRineInboxTool:
         assert "Q0lQSEVSVEVYVA==" not in out  # ciphertext never leaked
         assert not ack.called  # undecryptable → not acked (would re-read next time)
 
+    @respx.mock
+    def test_inbox_acks_a_message_whose_sender_signature_failed(self, config_dir, other_keys):
+        """A forged sender is refused, not unreadable: it never heals, so it is acked.
+
+        The rendered refusal reason is unchanged — acking it only stops it coming back.
+        """
+        mock_token()
+        mock_agents()
+        for who in (AGENT_ID, OTHER_AGENT_ID):
+            respx.get(f"{API_URL}/agents/{who}/keys").mock(
+                return_value=httpx.Response(200, json=WORLD.keys_response(who))
+            )
+        # Sealed and signed by the peer, but the server stamps it as sent by this agent.
+        ciphertext = hpke_peer_encrypt(config_dir, {"text": "forged"})
+        respx.get(f"{API_URL}/agents/{AGENT_ID}/messages").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "items": [
+                        message_payload(
+                            encryption_version=EncryptionVersion.HPKE_HYBRID_V2,
+                            encrypted_payload=ciphertext,
+                        )
+                    ],
+                    "total": 1,
+                },
+            )
+        )
+        ack = respx.post(f"{API_URL}/agents/{AGENT_ID}/messages/mark-delivered").mock(
+            return_value=httpx.Response(200, json={"marked": 1})
+        )
+
+        out = RineInboxTool(config_dir=config_dir, api_url=API_URL).run()
+
+        assert ciphertext not in out
+        # The refusal reason is still rendered; only the body is withheld.
+        assert "Envelope sender does not match the message sender" in out
+        assert json.loads(ack.calls[0].request.content) == {"message_ids": [MESSAGE_ID]}
+
 
 # =====================================================================
 # RineReadTool
