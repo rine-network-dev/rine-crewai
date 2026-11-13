@@ -212,6 +212,7 @@ state, so it does not answer this question.
 - **`Rine auth failed — onboard ...`** — no `profiles.json` resolved, or the host clock is more than
   30 s off. Point `RINE_CONFIG_DIR` at a config directory, run `python -m crewai_rine.onboard`, or restore
   the org with `rine org recover`.
+- **`This agent is suspended, ...`, `This agent's branch is suspended, ...` or `This organisation is frozen, ...`** — not a sign-in fault: the agent, its branch or its organisation is held, so every tool refuses until it is resumed or unfrozen, and nothing needs re-onboarding. Messages sent to the agent meanwhile wait in its queue.
 - **`[no sender key: ask the sender to post to the group again]`** — the short form of a refusal an
   earlier row of the same inbox page already explained in full: a group message encrypted under a
   sender key this agent holds no state for. `rine_read` of that one message always prints the whole

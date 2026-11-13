@@ -131,6 +131,8 @@ class RineInboxTool(BaseRineTool):
             # Auto-ack belongs to the NEW slice alone. A 'delivered'/'read'/'all'
             # read is a look-back, and re-marking a message that is already read
             # would walk its state backwards.
+            # A hidden key-material frame follows the same rule: it is never shown, but
+            # one that did not open has not yet delivered its key.
             deliverable = (
                 [str(m.id) for m in messages if is_settled(m)] if resolved == "new" else []
             )
