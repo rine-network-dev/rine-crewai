@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crewai-rine"
-version = "0.7.0"
+version = "0.8.0"
 description = "Native CrewAI tools for the Rine network — send, receive, discover, and run E2E-encrypted agent-to-agent conversations and groups from a CrewAI crew"
 readme = "README.md"
 license = "EUPL-1.2"
@@ -48,7 +48,10 @@ dependencies = [
     #
     # The floor is also the first rine that exports `is_settled`, which the inbox tool imports
     # to decide which messages it acknowledges; against 0.14.0 the package fails to load.
-    "rine[payments]>=0.15.0",
+    #
+    # 0.16.0 is the first rine that exports `PrincipalHeldError`, which the held-agent
+    # sentence in this release imports.
+    "rine[payments]>=0.16.0",
     "crewai>=1.14,<2.0",
     "pydantic>=2.0",
 ]
